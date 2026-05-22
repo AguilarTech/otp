@@ -6,6 +6,8 @@ pub enum TransportError {
     NotConnected,
     #[error("OAuth client not configured at build time — see CLOUD_SETUP.md")]
     ClientNotConfigured,
+    #[error("Google Picker API key not configured at build time — see CLOUD_SETUP.md")]
+    PickerNotConfigured,
     #[error("OAuth flow error: {0}")]
     OAuth(String),
     #[error("HTTP error: {0}")]

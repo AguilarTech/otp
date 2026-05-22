@@ -4,7 +4,11 @@ import { invoke } from '@tauri-apps/api/core'
 
 const emit = defineEmits(['back'])
 
-const status = ref({ configured: false, connected: false })
+const status = ref({
+	client_configured: false,
+	picker_configured: false,
+	connected: false,
+})
 const busy = ref(false)
 const error = ref('')
 const info = ref('')
@@ -60,15 +64,22 @@ async function disconnect() {
 		<section>
 			<h2>Google Drive</h2>
 
-			<div v-if="!status.configured" class="warn">
+			<div v-if="!status.client_configured" class="warn">
 				OAuth client credentials were not embedded at build time. See
-				<code>CLOUD_SETUP.md</code> in the repo for the Google Cloud
-				console steps, then rebuild with
-				<code>OTP_GOOGLE_CLIENT_ID</code> and
+				<code>CLOUD_SETUP.md</code> for the Google Cloud console steps,
+				then rebuild with <code>OTP_GOOGLE_CLIENT_ID</code> and
 				<code>OTP_GOOGLE_CLIENT_SECRET</code> set in the environment.
 			</div>
 
-			<div v-else>
+			<div v-else-if="!status.picker_configured" class="warn">
+				OAuth is configured but the Google Picker API key isn't.
+				Cross-account folder claiming will be disabled — both peers must
+				use the same Google identity, or use the manual paste flow.
+				Set <code>OTP_GOOGLE_API_KEY</code> and rebuild (see
+				<code>CLOUD_SETUP.md</code>).
+			</div>
+
+			<div v-if="status.client_configured">
 				<div class="status">
 					<span :class="['dot', status.connected ? 'on' : 'off']"></span>
 					{{ status.connected ? 'Connected' : 'Not connected' }}

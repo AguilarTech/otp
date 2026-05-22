@@ -1,6 +1,7 @@
 pub mod drive;
 pub mod error;
 pub mod oauth;
+pub mod picker;
 pub mod poller;
 
 use std::sync::Mutex;
@@ -15,17 +16,34 @@ pub use error::{Result, TransportError};
 const KEYRING_SERVICE: &str = "com.aguilartech.otp";
 const KEYRING_USER: &str = "google_drive_refresh_token";
 
-/// Build-time embedding of the OAuth client credentials. CLOUD_SETUP.md
-/// covers the Google Cloud console steps to produce these. If the env vars
-/// are not set at build time, all transport commands fail with
-/// `ClientNotConfigured`.
+/// Build-time embedding of the Google Cloud credentials. CLOUD_SETUP.md
+/// covers the console steps. If the env vars are unset at build time,
+/// transport commands surface `ClientNotConfigured` (OAuth) or
+/// `PickerNotConfigured` (Picker) and the manual paste flow remains
+/// the only usable transport.
 const CLIENT_ID: Option<&str> = option_env!("OTP_GOOGLE_CLIENT_ID");
 const CLIENT_SECRET: Option<&str> = option_env!("OTP_GOOGLE_CLIENT_SECRET");
+const API_KEY: Option<&str> = option_env!("OTP_GOOGLE_API_KEY");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionStatus {
-    pub configured: bool,
+    pub client_configured: bool,
+    pub picker_configured: bool,
     pub connected: bool,
+}
+
+pub fn api_key() -> Option<&'static str> {
+    API_KEY
+}
+
+/// Picker's `appId` is the numeric Cloud project number. For Desktop
+/// OAuth clients the client_id starts with `<project_number>-` so we
+/// extract it instead of demanding a separate env var.
+pub fn app_id() -> Option<String> {
+    CLIENT_ID
+        .and_then(|id| id.split('-').next())
+        .filter(|s| s.chars().all(|c| c.is_ascii_digit()))
+        .map(|s| s.to_string())
 }
 
 #[derive(Clone)]
@@ -61,7 +79,8 @@ impl Transport {
 
     pub fn status(&self) -> ConnectionStatus {
         ConnectionStatus {
-            configured: CLIENT_ID.is_some(),
+            client_configured: CLIENT_ID.is_some(),
+            picker_configured: API_KEY.is_some(),
             connected: self
                 .state
                 .lock()
