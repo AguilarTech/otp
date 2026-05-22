@@ -38,6 +38,11 @@ const driveBusy = ref(false)
 const confirmingRemove = ref(false)
 const removeBusy = ref(false)
 
+// Drive panel is folded by default so the compose box is the first
+// interactive thing on the page. Auto-expanded if the friend is
+// already bound to a Drive folder so the user can see/change it.
+const driveOpen = ref(false)
+
 let unlistenInbox = null
 
 async function refreshLocal() {
@@ -404,113 +409,120 @@ async function removeFriend() {
 		<div class="eyebrow">Friend</div>
 		<h1 class="h1">{{ local.name }}</h1>
 
-		<div class="card">
-			<div class="card-head">
-				<div>
-					<div class="h2" style="margin-bottom: 4px">Internet delivery</div>
-					<p class="small" style="margin: 0">
-						Optional auto-delivery through a private Google Drive
-						folder. If you'd rather not use Google, just save
-						each message as a small <code>.otp</code> file below.
+		<details class="card drive-card" :open="driveOpen">
+			<summary class="drive-summary" @click.prevent="driveOpen = !driveOpen">
+				<div class="drive-summary-text">
+					<div class="h3" style="margin: 0">Internet delivery</div>
+					<p class="small" style="margin: 4px 0 0">
+						Optional — for auto-sending and auto-receiving via
+						Google Drive. Tap to set up or change.
 					</p>
 				</div>
-				<span
-					class="pill"
-					:class="autoUploadActive ? 'pill-success' : 'pill-neutral'"
-				>
-					<span class="dot" :class="{ pulse: autoUploadActive }"></span>
-					{{
-						autoUploadActive
-							? 'Live'
-							: driveBound
-								? 'Drive offline'
-								: 'Not set up'
-					}}
-				</span>
-			</div>
-
-			<div v-if="!oauthStatus.client_configured" class="banner banner-warn">
-				Google Drive isn't set up in this build. You can still send and
-				receive messages by saving them as <code>.otp</code> files.
-			</div>
-			<div v-else-if="!oauthStatus.connected" class="banner banner-info">
-				Sign in to Google Drive in <strong>Settings</strong> to turn on
-				auto-delivery, or just save messages as files instead.
-			</div>
-
-			<div v-if="driveBound" class="bound-row">
-				<div>
-					<div class="small" style="margin-bottom: 4px">Drive folder</div>
-					<code class="mono">{{ local.drive_folder_id }}</code>
+				<div class="drive-summary-meta">
+					<span
+						class="pill"
+						:class="autoUploadActive ? 'pill-success' : 'pill-neutral'"
+					>
+						<span class="dot" :class="{ pulse: autoUploadActive }"></span>
+						{{
+							autoUploadActive
+								? 'Live'
+								: driveBound
+									? 'Drive offline'
+									: 'Not set up'
+						}}
+					</span>
+					<svg class="drive-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M6 9l6 6 6-6" />
+					</svg>
 				</div>
-				<button
-					class="btn btn-danger"
-					type="button"
-					@click="unbindDriveFolder"
-					:disabled="driveBusy"
-				>
-					Unlink
-				</button>
-			</div>
+			</summary>
 
-			<div v-else-if="oauthStatus.connected" class="drive-options">
-				<div class="drive-sub">
-					<label>Create a fresh folder in your Drive and invite them</label>
-					<div class="combo">
-						<input
-							v-model="peerEmail"
-							:placeholder="`${local.name}'s Google email (optional)`"
-							:disabled="driveBusy"
-						/>
-						<button
-							class="btn btn-primary"
-							type="button"
-							@click="createDriveFolder"
-							:disabled="driveBusy"
-						>
-							Create folder
-						</button>
-					</div>
+			<div class="drive-body">
+				<div v-if="!oauthStatus.client_configured" class="banner banner-warn">
+					Google Drive isn't set up in this build. You can still send
+					and receive messages by saving them as <code>.otp</code>
+					files.
+				</div>
+				<div v-else-if="!oauthStatus.connected" class="banner banner-info">
+					Sign in to Google Drive in <strong>Settings</strong> to turn
+					on auto-delivery, or just save messages as files instead.
 				</div>
 
-				<div class="drive-sub">
-					<label>Or pick a folder they shared with you</label>
-					<div class="row">
-						<button
-							class="btn btn-primary"
-							type="button"
-							@click="pickDriveFolder"
-							:disabled="driveBusy || !oauthStatus.picker_configured"
-						>
-							{{ driveBusy ? 'Waiting for browser…' : 'Choose folder from Drive' }}
-						</button>
+				<div v-if="driveBound" class="bound-row">
+					<div>
+						<div class="small" style="margin-bottom: 4px">Drive folder</div>
+						<code class="mono">{{ local.drive_folder_id }}</code>
 					</div>
-					<div v-if="!oauthStatus.picker_configured" class="field-hint">
-						The Drive picker isn't set up in this build. See
-						<code>CLOUD_SETUP.md</code>.
-					</div>
+					<button
+						class="btn btn-danger"
+						type="button"
+						@click="unbindDriveFolder"
+						:disabled="driveBusy"
+					>
+						Unlink
+					</button>
 				</div>
 
-				<div class="drive-sub">
-					<label>Or paste a folder link directly</label>
-					<div class="combo">
-						<input
-							v-model="folderToBind"
-							placeholder="https://drive.google.com/drive/folders/…"
-							:disabled="driveBusy"
-						/>
-						<button
-							class="btn btn-ghost"
-							type="button"
-							@click="bindDriveFolder"
-							:disabled="driveBusy"
-						>
-							Link
-						</button>
+				<div v-else-if="oauthStatus.connected" class="drive-options">
+					<div class="drive-sub">
+						<label>Create a fresh folder in your Drive and invite them</label>
+						<div class="combo">
+							<input
+								v-model="peerEmail"
+								:placeholder="`${local.name}'s Google email (optional)`"
+								:disabled="driveBusy"
+							/>
+							<button
+								class="btn btn-primary"
+								type="button"
+								@click="createDriveFolder"
+								:disabled="driveBusy"
+							>
+								Create folder
+							</button>
+						</div>
+					</div>
+
+					<div class="drive-sub">
+						<label>Or pick a folder they shared with you</label>
+						<div class="row">
+							<button
+								class="btn btn-primary"
+								type="button"
+								@click="pickDriveFolder"
+								:disabled="driveBusy || !oauthStatus.picker_configured"
+							>
+								{{ driveBusy ? 'Waiting for browser…' : 'Choose folder from Drive' }}
+							</button>
+						</div>
+						<div v-if="!oauthStatus.picker_configured" class="field-hint">
+							The Drive picker isn't set up in this build. See
+							<code>CLOUD_SETUP.md</code>.
+						</div>
+					</div>
+
+					<div class="drive-sub">
+						<label>Or paste a folder link directly</label>
+						<div class="combo">
+							<input
+								v-model="folderToBind"
+								placeholder="https://drive.google.com/drive/folders/…"
+								:disabled="driveBusy"
+							/>
+							<button
+								class="btn btn-ghost"
+								type="button"
+								@click="bindDriveFolder"
+								:disabled="driveBusy"
+							>
+								Link
+							</button>
+						</div>
 					</div>
 				</div>
 			</div>
-		</div>
+		</details>
 
 		<!-- Compose -->
 		<div class="card">
@@ -771,6 +783,62 @@ async function removeFriend() {
 		justify-content: space-between;
 		gap: 16px;
 		margin-bottom: 16px;
+	}
+
+	/* Collapsible Drive card — folded by default so the compose is the
+	   first thing under the friend's name. */
+	.drive-card {
+		padding: 0;
+	}
+
+	.drive-summary {
+		list-style: none;
+		cursor: pointer;
+		padding: 18px 22px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 14px;
+		transition: background var(--dur-hover);
+	}
+
+	.drive-summary::-webkit-details-marker,
+	.drive-summary::marker {
+		display: none;
+	}
+
+	.drive-summary:hover {
+		background: color-mix(in oklab, var(--accent) 4%, var(--panel));
+	}
+
+	.drive-summary-text {
+		min-width: 0;
+		flex: 1;
+	}
+
+	.drive-summary-meta {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		flex-shrink: 0;
+	}
+
+	.drive-chev {
+		width: 16px;
+		height: 16px;
+		color: var(--fg-3);
+		transition: transform 0.25s var(--ease-out), color var(--dur-hover);
+	}
+
+	.drive-card[open] .drive-chev {
+		transform: rotate(180deg);
+		color: var(--accent);
+	}
+
+	.drive-body {
+		padding: 0 22px 22px;
+		border-top: 1px solid var(--line-2);
+		padding-top: 18px;
 	}
 
 	.bound-row {
