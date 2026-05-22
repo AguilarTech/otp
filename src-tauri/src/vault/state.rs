@@ -1,4 +1,4 @@
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 
@@ -87,6 +87,7 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<()> {
     std::fs::rename(&tmp, path)?;
     #[cfg(unix)]
     {
+        use std::fs::File;
         let d = File::open(parent)?;
         let _ = d.sync_all();
     }
