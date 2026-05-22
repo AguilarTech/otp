@@ -2,8 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   rust:
@@ -54,3 +54,52 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+
+  macos:
+    name: Build macOS (universal .dmg)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: macos-universal
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Build (Tauri, universal target)
+        env:
+          # These are read by option_env! at compile time. If you don't
+          # set them as repo secrets, the build still succeeds — the
+          # Drive features just stay disabled in the resulting .dmg.
+          OTP_GOOGLE_CLIENT_ID: ${{ secrets.OTP_GOOGLE_CLIENT_ID }}
+          OTP_GOOGLE_CLIENT_SECRET: ${{ secrets.OTP_GOOGLE_CLIENT_SECRET }}
+          OTP_GOOGLE_API_KEY: ${{ secrets.OTP_GOOGLE_API_KEY }}
+        run: npm run tauri build -- --target universal-apple-darwin
+
+      - name: Upload .dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: otp-messenger-macos-universal
+          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload .app (zipped)
+        uses: actions/upload-artifact@v4
+        with:
+          name: otp-messenger-macos-app
+          path: src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+          if-no-files-found: warn
+          retention-days: 30
