@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use base64::Engine;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
@@ -9,12 +10,19 @@ use super::drive::DriveClient;
 use super::Transport;
 use crate::vault::{Vault, VaultError};
 
+const TAG_TEXT: u8 = 0x01;
+const TAG_FILE: u8 = 0x02;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct InboxMessageEvent {
     pub pairing_id: String,
     pub seq: u64,
     pub timestamp_ms: u64,
-    pub plaintext: String,
+    pub kind: &'static str,
+    pub text: Option<String>,
+    pub file_name: Option<String>,
+    pub file_size: Option<u64>,
+    pub file_bytes_b64: Option<String>,
 }
 
 pub async fn run(
@@ -75,26 +83,20 @@ async fn poll_pairing(
                     );
                     continue;
                 }
-                let plaintext = match std::str::from_utf8(&msg.plaintext) {
-                    Ok(s) => s.to_string(),
-                    Err(_) => {
-                        eprintln!("warning: non-UTF-8 plaintext in {}", file.id);
-                        continue;
+                match build_event(&msg.pairing_id, msg.seq, msg.timestamp_ms, &msg.plaintext) {
+                    Some(event) => {
+                        let _ = app.emit("inbox-message", event);
+                        let _ = drive.delete(&file.id).await;
                     }
-                };
-                let _ = app.emit(
-                    "inbox-message",
-                    InboxMessageEvent {
-                        pairing_id: msg.pairing_id.to_string(),
-                        seq: msg.seq,
-                        timestamp_ms: msg.timestamp_ms,
-                        plaintext,
-                    },
-                );
-                let _ = drive.delete(&file.id).await;
+                    None => {
+                        eprintln!(
+                            "warning: could not parse decrypted plaintext in {}; leaving file in place",
+                            file.id
+                        );
+                    }
+                }
             }
             Err(VaultError::Replay { .. }) => {
-                // Already accepted; safe to delete.
                 let _ = drive.delete(&file.id).await;
             }
             Err(e) => {
@@ -106,4 +108,67 @@ async fn poll_pairing(
         }
     }
     Ok(())
+}
+
+fn build_event(
+    pairing_id: &Uuid,
+    seq: u64,
+    timestamp_ms: u64,
+    plaintext: &[u8],
+) -> Option<InboxMessageEvent> {
+    match plaintext.first() {
+        Some(&TAG_TEXT) => {
+            let text = std::str::from_utf8(&plaintext[1..]).ok()?.to_string();
+            Some(InboxMessageEvent {
+                pairing_id: pairing_id.to_string(),
+                seq,
+                timestamp_ms,
+                kind: "text",
+                text: Some(text),
+                file_name: None,
+                file_size: None,
+                file_bytes_b64: None,
+            })
+        }
+        Some(&TAG_FILE) => {
+            if plaintext.len() < 3 {
+                return None;
+            }
+            let name_len = u16::from_be_bytes([plaintext[1], plaintext[2]]) as usize;
+            let header_end = 3 + name_len;
+            if plaintext.len() < header_end {
+                return None;
+            }
+            let file_name = std::str::from_utf8(&plaintext[3..header_end])
+                .ok()?
+                .to_string();
+            let content = &plaintext[header_end..];
+            Some(InboxMessageEvent {
+                pairing_id: pairing_id.to_string(),
+                seq,
+                timestamp_ms,
+                kind: "file",
+                text: None,
+                file_name: Some(file_name),
+                file_size: Some(content.len() as u64),
+                file_bytes_b64: Some(
+                    base64::engine::general_purpose::STANDARD.encode(content),
+                ),
+            })
+        }
+        _ => {
+            // Legacy untagged text from earlier builds.
+            let text = std::str::from_utf8(plaintext).ok()?.to_string();
+            Some(InboxMessageEvent {
+                pairing_id: pairing_id.to_string(),
+                seq,
+                timestamp_ms,
+                kind: "text",
+                text: Some(text),
+                file_name: None,
+                file_size: None,
+                file_bytes_b64: None,
+            })
+        }
+    }
 }

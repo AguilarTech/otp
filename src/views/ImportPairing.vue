@@ -51,17 +51,19 @@ async function importPairing() {
 
 <template>
 	<div>
-		<button
-			class="btn btn-ghost back"
-			type="button"
-			@click="emit('cancel')"
-			:disabled="busy"
-		>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-				<path d="M19 12H5" /><path d="M11 18l-6-6 6-6" />
-			</svg>
-			Back
-		</button>
+		<div class="back-row">
+			<button
+				class="btn btn-ghost"
+				type="button"
+				@click="emit('cancel')"
+				:disabled="busy"
+			>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M19 12H5" /><path d="M11 18l-6-6 6-6" />
+				</svg>
+				Back
+			</button>
+		</div>
 
 		<div class="eyebrow">Add a friend from USB</div>
 		<h1 class="h1">Bring in a secret your friend handed you.</h1>
@@ -137,10 +139,6 @@ async function importPairing() {
 </template>
 
 <style scoped>
-	.back {
-		margin-bottom: 18px;
-	}
-
 	.combo {
 		display: flex;
 		gap: 8px;
