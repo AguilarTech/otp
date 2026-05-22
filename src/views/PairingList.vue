@@ -108,12 +108,12 @@ function percent(used, total) {
 					</li>
 					<li class="step-card">
 						<div class="step-num">03</div>
-						<div class="h3">Deliver anywhere</div>
+						<div class="h3">Deliver any way you like</div>
 						<p>
-							Link Google Drive and we auto-deliver for you. Or copy
-							the encrypted text into email, Signal, even paper —
-							whatever works. Your friend's app unlocks it on the
-							other end.
+							Sign in to Google Drive and we auto-deliver for you.
+							Or save each message as a small <code>.otp</code>
+							file and email/Signal/AirDrop it. Your friend's app
+							opens it on the other end.
 						</p>
 					</li>
 					<li class="step-card">
@@ -126,6 +126,47 @@ function percent(used, total) {
 						</p>
 					</li>
 				</ol>
+			</section>
+
+			<section class="promise">
+				<div class="eyebrow">The promise</div>
+				<div class="promise-grid">
+					<div class="promise-card does">
+						<div class="promise-tag">Does</div>
+						<p>
+							Encrypts every message with a fresh, never-reused
+							slice of a key you and a friend swapped in person.
+							The encryption is mathematically unbreakable — not
+							even a quantum computer can crack it.
+						</p>
+					</div>
+					<div class="promise-card doesnt">
+						<div class="promise-tag">Doesn't</div>
+						<p>
+							Keep any history. Messages live in memory while the
+							app is open and disappear when you dismiss them or
+							close the window. Reopening won't bring them back.
+						</p>
+					</div>
+					<div class="promise-card sees">
+						<div class="promise-tag">What Google sees (if you use it)</div>
+						<p>
+							The size of each encrypted blob, the timing, and
+							which Google accounts it passes between. Never the
+							contents.
+						</p>
+					</div>
+					<div class="promise-card optional">
+						<div class="promise-tag">Works without Google</div>
+						<p>
+							Google Drive is just the auto-delivery option. You
+							can use the app fully offline-of-Google: save each
+							message as a small <code>.otp</code> file and share
+							it however you already chat — email, Signal, even
+							printed paper.
+						</p>
+					</div>
+				</div>
 			</section>
 		</template>
 
@@ -341,6 +382,71 @@ function percent(used, total) {
 		margin: 0;
 		font-size: 13.5px;
 		line-height: 1.55;
+	}
+
+	.step-card p code {
+		font-size: 12px;
+	}
+
+	/* The "promise" panel — does / doesn't / what Google sees / works without Google. */
+	.promise {
+		margin-bottom: 32px;
+	}
+
+	.promise-grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 12px;
+	}
+
+	@media (min-width: 640px) {
+		.promise-grid {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
+
+	.promise-card {
+		background: var(--panel);
+		border: 1px solid var(--line);
+		border-radius: var(--r-card);
+		padding: 18px 22px;
+		box-shadow: var(--shadow-card);
+		border-left-width: 3px;
+		border-left-style: solid;
+	}
+
+	.promise-card.does {
+		border-left-color: var(--success);
+	}
+	.promise-card.doesnt {
+		border-left-color: var(--accent);
+	}
+	.promise-card.sees {
+		border-left-color: var(--warn);
+	}
+	.promise-card.optional {
+		border-left-color: var(--accent-2);
+	}
+
+	.promise-tag {
+		font-family: var(--sans);
+		font-size: 10.5px;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--fg-2);
+		margin-bottom: 8px;
+	}
+
+	.promise-card p {
+		margin: 0;
+		font-size: 13px;
+		line-height: 1.55;
+		color: var(--fg-2);
+	}
+
+	.promise-card p code {
+		font-size: 12px;
 	}
 
 	/* Returning header */
