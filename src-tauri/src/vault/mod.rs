@@ -108,6 +108,30 @@ impl Vault {
         Ok(st.pairings.iter().map(PairingInfo::from).collect())
     }
 
+    /// Remove a pairing from state, then best-effort wipe and delete its
+    /// pad files. Committing the state change first means a crash mid-wipe
+    /// still leaves the pairing forgotten from the app's perspective —
+    /// consistent with the rest of the vault's "advance cursor, then
+    /// best-effort zero" ordering.
+    pub fn delete_pairing(&self, pairing_id: &Uuid) -> Result<()> {
+        let mut st = self.state.lock().unwrap();
+        let idx = st
+            .pairings
+            .iter()
+            .position(|p| &p.id == pairing_id)
+            .ok_or(VaultError::PairingNotFound(*pairing_id))?;
+        st.pairings.remove(idx);
+        self.persist(&st)?;
+        drop(st);
+
+        let out_path = self.pad_path(pairing_id, Direction::Out);
+        let in_path = self.pad_path(pairing_id, Direction::In);
+        let _ = wipe_and_remove(&out_path);
+        let _ = wipe_and_remove(&in_path);
+        let _ = std::fs::remove_dir(self.base.join("pads").join(pairing_id.to_string()));
+        Ok(())
+    }
+
     pub fn set_drive_folder_id(&self, pairing_id: &Uuid, folder_id: String) -> Result<()> {
         let mut st = self.state.lock().unwrap();
         {
@@ -494,6 +518,18 @@ fn write_pad(path: &Path, data: &[u8]) -> Result<()> {
     let mut f = File::create(path)?;
     f.write_all(data)?;
     f.sync_all()?;
+    Ok(())
+}
+
+fn wipe_and_remove(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let len = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+    if len > 0 {
+        let _ = pad::zeroize_range(path, 0, len);
+    }
+    std::fs::remove_file(path)?;
     Ok(())
 }
 

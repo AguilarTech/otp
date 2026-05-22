@@ -16,6 +16,7 @@ use transport::{ConnectionStatus, DriveClient, Transport};
 use vault::{PairingInfo, Vault};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
+const DRIVE_APP_ROOT_FOLDER: &str = "OTP Messenger";
 const DRIVE_FOLDER_NAME_PREFIX: &str = "otp-msgr";
 const MAX_ATTACHMENT_BYTES: u64 = 50 * 1024 * 1024;
 
@@ -292,9 +293,18 @@ async fn drive_create_folder(
 ) -> Result<String, String> {
     let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
     let drive = DriveClient::new(state.transport.clone());
+
+    // All per-pairing mailboxes live inside a single app-managed
+    // "OTP Messenger" folder at the user's Drive root — created on
+    // first use, reused after.
+    let parent = drive
+        .ensure_root_folder(DRIVE_APP_ROOT_FOLDER)
+        .await
+        .map_err(|e| format!("could not set up the OTP Messenger folder in Drive: {}", e))?;
+
     let folder_name = format!("{}-{}", DRIVE_FOLDER_NAME_PREFIX, Uuid::new_v4());
     let folder_id = drive
-        .create_folder(&folder_name)
+        .create_subfolder(&folder_name, &parent)
         .await
         .map_err(|e| e.to_string())?;
     if !peer_email.trim().is_empty() {
@@ -384,6 +394,12 @@ fn drive_unbind_folder(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn remove_pairing(state: State<'_, AppState>, pairing_id: String) -> Result<(), String> {
+    let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
+    state.vault.delete_pairing(&id).map_err(|e| e.to_string())
+}
+
 #[cfg(unix)]
 #[allow(clippy::unnecessary_cast)] // f_bavail/f_frsize widths differ across libc targets
 fn available_space(path: &Path) -> std::io::Result<u64> {
@@ -447,6 +463,7 @@ fn main() {
             drive_bind_folder,
             drive_pick_folder,
             drive_unbind_folder,
+            remove_pairing,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

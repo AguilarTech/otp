@@ -54,13 +54,33 @@ impl DriveClient {
         Err(TransportError::DriveApi { status: code, body })
     }
 
-    /// Create a folder owned by the OAuth account. Returns the folder ID.
+    /// Create a folder at the root of the OAuth account's Drive.
     pub async fn create_folder(&self, name: &str) -> Result<String> {
+        self.create_folder_impl(name, None).await
+    }
+
+    /// Create a folder inside an existing parent folder.
+    pub async fn create_subfolder(
+        &self,
+        name: &str,
+        parent_folder_id: &str,
+    ) -> Result<String> {
+        self.create_folder_impl(name, Some(parent_folder_id)).await
+    }
+
+    async fn create_folder_impl(
+        &self,
+        name: &str,
+        parent_folder_id: Option<&str>,
+    ) -> Result<String> {
         let token = self.token().await?;
-        let body = json!({
+        let mut body = json!({
             "name": name,
             "mimeType": FOLDER_MIME,
         });
+        if let Some(parent) = parent_folder_id {
+            body["parents"] = json!([parent]);
+        }
         let resp = self
             .http
             .post(format!("{}/files", DRIVE_API))
@@ -71,6 +91,44 @@ impl DriveClient {
         let resp = Self::check_status(resp).await?;
         let id: IdResponse = resp.json().await?;
         Ok(id.id)
+    }
+
+    /// Look up an existing folder at the Drive root by exact name, returning
+    /// the first match. drive.file scope means we only see folders this app
+    /// created — perfect for finding our own app-root container without
+    /// stepping on anything else in the user's Drive.
+    pub async fn find_root_folder_by_name(
+        &self,
+        name: &str,
+    ) -> Result<Option<String>> {
+        let token = self.token().await?;
+        let q = format!(
+            "name = '{}' and mimeType = '{}' and 'root' in parents and trashed = false",
+            name.replace('\'', "\\'"),
+            FOLDER_MIME,
+        );
+        let resp = self
+            .http
+            .get(format!("{}/files", DRIVE_API))
+            .bearer_auth(&token)
+            .query(&[
+                ("q", q.as_str()),
+                ("fields", "files(id,name)"),
+                ("pageSize", "1"),
+            ])
+            .send()
+            .await?;
+        let resp = Self::check_status(resp).await?;
+        let parsed: ListResponse = resp.json().await?;
+        Ok(parsed.files.into_iter().next().map(|f| f.id))
+    }
+
+    /// Find-or-create the named folder at the Drive root, returning its id.
+    pub async fn ensure_root_folder(&self, name: &str) -> Result<String> {
+        if let Some(id) = self.find_root_folder_by_name(name).await? {
+            return Ok(id);
+        }
+        self.create_folder(name).await
     }
 
     /// Share a folder with a user by email. Sends Google's standard
