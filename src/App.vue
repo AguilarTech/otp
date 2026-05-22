@@ -7,6 +7,7 @@ import CreatePairing from './views/CreatePairing.vue'
 import ImportPairing from './views/ImportPairing.vue'
 import Conversation from './views/Conversation.vue'
 import Settings from './views/Settings.vue'
+import About from './views/About.vue'
 
 const view = ref({ name: 'list' })
 const pairings = ref([])
@@ -52,6 +53,13 @@ async function backToList() {
 				</button>
 
 				<div class="topbar-actions">
+					<button
+						class="topbar-link"
+						type="button"
+						@click="open('about')"
+					>
+						How it works
+					</button>
 					<span
 						v-if="view.name === 'list' && pairings.length > 0"
 						class="pill"
@@ -73,6 +81,7 @@ async function backToList() {
 				@create="open('create')"
 				@import="open('import')"
 				@settings="open('settings')"
+				@about="open('about')"
 				@open="(p) => open('convo', { pairing: p })"
 				@refresh="refresh"
 			/>
@@ -93,6 +102,12 @@ async function backToList() {
 				@pairing-changed="refresh"
 			/>
 			<Settings v-else-if="view.name === 'settings'" @back="backToList" />
+			<About
+				v-else-if="view.name === 'about'"
+				@back="backToList"
+				@create="open('create')"
+				@import="open('import')"
+			/>
 		</main>
 	</div>
 </template>
@@ -138,8 +153,24 @@ async function backToList() {
 
 	.topbar-actions {
 		display: flex;
-		gap: 10px;
+		gap: 12px;
 		align-items: center;
+	}
+
+	.topbar-link {
+		background: transparent;
+		border: 0;
+		padding: 4px 0;
+		cursor: pointer;
+		font-family: var(--sans);
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--fg-2);
+		transition: color var(--dur-hover);
+	}
+
+	.topbar-link:hover {
+		color: var(--accent);
 	}
 
 	.content {
