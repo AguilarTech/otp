@@ -260,6 +260,7 @@ fn drive_unbind_folder(
 }
 
 #[cfg(unix)]
+#[allow(clippy::unnecessary_cast)] // f_bavail/f_frsize widths differ across libc targets
 fn available_space(path: &Path) -> std::io::Result<u64> {
     use std::os::unix::ffi::OsStrExt;
     let cstr = std::ffi::CString::new(path.as_os_str().as_bytes())

@@ -469,7 +469,7 @@ fn generate_pad(path: &Path, size: u64) -> Result<()> {
 fn generate_pad_multi(paths: &[&Path], size: u64) -> Result<()> {
     let mut files: Vec<File> = paths
         .iter()
-        .map(|p| File::create(p))
+        .map(File::create)
         .collect::<std::io::Result<Vec<_>>>()?;
     const CHUNK: usize = 1024 * 1024;
     let mut buf = vec![0u8; CHUNK];

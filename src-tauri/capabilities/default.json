@@ -1,7 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default permissions for the main window",
+  "description": "Minimum permissions for the main window: app data dir resolution, event emission to the webview, and a directory-only file picker for USB pairing.",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:default"]
+  "permissions": [
+    "core:app:default",
+    "core:event:default",
+    "core:path:default",
+    "core:window:default",
+    "core:webview:default",
+    "dialog:allow-open"
+  ]
 }

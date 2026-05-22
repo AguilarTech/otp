@@ -15,6 +15,23 @@ function formatBytes(n) {
 	if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`
 	return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
+
+const WARN_THRESHOLD = 10 * 1024 * 1024 // 10 MB
+const CRITICAL_THRESHOLD = 256 * 1024 // 256 KB
+
+function padLevel(remaining) {
+	if (remaining < CRITICAL_THRESHOLD) return 'critical'
+	if (remaining < WARN_THRESHOLD) return 'warn'
+	return 'ok'
+}
+
+function pairingLevel(p) {
+	const a = padLevel(p.out_remaining)
+	const b = padLevel(p.in_remaining)
+	if (a === 'critical' || b === 'critical') return 'critical'
+	if (a === 'warn' || b === 'warn') return 'warn'
+	return 'ok'
+}
 </script>
 
 <template>
@@ -41,14 +58,31 @@ function formatBytes(n) {
 		</div>
 
 		<ul v-else class="pairings">
-			<li v-for="p in pairings" :key="p.id" @click="emit('open', p)">
+			<li
+				v-for="p in pairings"
+				:key="p.id"
+				:class="['pairing', pairingLevel(p)]"
+				@click="emit('open', p)"
+			>
 				<div class="head">
 					<span class="name">{{ p.name }}</span>
-					<span v-if="p.drive_folder_id" class="badge">drive</span>
+					<span v-if="p.drive_folder_id" class="badge drive">drive</span>
+					<span v-if="pairingLevel(p) === 'critical'" class="badge crit">
+						pad critical
+					</span>
+					<span v-else-if="pairingLevel(p) === 'warn'" class="badge warn">
+						pad low
+					</span>
 				</div>
 				<div class="meta">
-					<span>↑ {{ formatBytes(p.out_remaining) }} / {{ formatBytes(p.out_total) }}</span>
-					<span>↓ {{ formatBytes(p.in_remaining) }} / {{ formatBytes(p.in_total) }}</span>
+					<span :class="['stat', padLevel(p.out_remaining)]">
+						↑ {{ formatBytes(p.out_remaining) }} /
+						{{ formatBytes(p.out_total) }}
+					</span>
+					<span :class="['stat', padLevel(p.in_remaining)]">
+						↓ {{ formatBytes(p.in_remaining) }} /
+						{{ formatBytes(p.in_total) }}
+					</span>
 					<span class="seq">seq {{ p.seq_out }} / {{ p.last_seq_in }}</span>
 				</div>
 			</li>
@@ -112,6 +146,13 @@ function formatBytes(n) {
 		border-radius: 6px;
 		cursor: pointer;
 		text-align: left;
+		border-left: 3px solid transparent;
+	}
+	.pairings li.warn {
+		border-left-color: #d0c070;
+	}
+	.pairings li.critical {
+		border-left-color: #ff7070;
 	}
 	.pairings li:hover {
 		background: #333;
@@ -127,11 +168,21 @@ function formatBytes(n) {
 	.badge {
 		font-size: 0.7em;
 		text-transform: uppercase;
-		background: #1a3a1a;
-		color: #8acc8a;
 		padding: 1px 6px;
 		border-radius: 3px;
 		letter-spacing: 0.05em;
+	}
+	.badge.drive {
+		background: #1a3a1a;
+		color: #8acc8a;
+	}
+	.badge.warn {
+		background: #2a2410;
+		color: #d0c070;
+	}
+	.badge.crit {
+		background: #2a1a1a;
+		color: #ff9090;
 	}
 	.meta {
 		display: flex;
@@ -139,6 +190,12 @@ function formatBytes(n) {
 		color: #aaa;
 		font-size: 0.85em;
 		margin-top: 4px;
+	}
+	.stat.warn {
+		color: #d0c070;
+	}
+	.stat.critical {
+		color: #ff9090;
 	}
 	.seq {
 		font-family: monospace;
