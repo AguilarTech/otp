@@ -43,6 +43,10 @@ const removeBusy = ref(false)
 // already bound to a Drive folder so the user can see/change it.
 const driveOpen = ref(false)
 
+// "Manage friend" (containing the destructive Remove flow) stays
+// folded too — keeps the conversation screen focused on send/receive.
+const manageOpen = ref(false)
+
 let unlistenInbox = null
 
 async function refreshLocal() {
@@ -735,44 +739,61 @@ async function removeFriend() {
 		<div v-if="info" class="banner banner-success">{{ info }}</div>
 		<div v-if="error" class="banner banner-error">{{ error }}</div>
 
-		<div class="card danger-zone">
-			<div class="eyebrow danger-eyebrow">Danger zone</div>
-			<p class="small">
-				Remove {{ local.name }} from this device and wipe their key
-				file. After this you won't be able to read past messages from
-				them or send new ones until you meet in person and swap a
-				fresh USB stick. The copy of the key on their device is
-				untouched — they'll need to remove their side themselves.
-			</p>
-			<div v-if="!confirmingRemove" class="row" style="margin-top: 12px">
-				<button
-					class="btn btn-danger"
-					type="button"
-					@click="confirmingRemove = true"
-					:disabled="removeBusy"
-				>
-					Remove this friend
-				</button>
+		<details class="card manage-card" :open="manageOpen">
+			<summary
+				class="manage-summary"
+				@click.prevent="manageOpen = !manageOpen"
+			>
+				<div class="manage-summary-text">
+					<div class="h3" style="margin: 0">Manage friend</div>
+					<p class="small" style="margin: 4px 0 0">
+						Remove this friend and wipe their key from this device.
+					</p>
+				</div>
+				<svg class="manage-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M6 9l6 6 6-6" />
+				</svg>
+			</summary>
+
+			<div class="manage-body">
+				<p class="small" style="margin: 0 0 14px">
+					Removes {{ local.name }} from this device and wipes their
+					key file. After this you won't be able to read past
+					messages from them or send new ones until you meet in
+					person and swap a fresh USB stick. The copy of the key on
+					their device is untouched — they'll need to remove their
+					side themselves.
+				</p>
+				<div v-if="!confirmingRemove" class="row">
+					<button
+						class="btn btn-danger"
+						type="button"
+						@click="confirmingRemove = true"
+						:disabled="removeBusy"
+					>
+						Remove this friend
+					</button>
+				</div>
+				<div v-else class="row">
+					<button
+						class="btn btn-danger"
+						type="button"
+						@click="removeFriend"
+						:disabled="removeBusy"
+					>
+						{{ removeBusy ? 'Wiping…' : `Yes, remove ${local.name} permanently` }}
+					</button>
+					<button
+						class="btn btn-ghost"
+						type="button"
+						@click="confirmingRemove = false"
+						:disabled="removeBusy"
+					>
+						Cancel
+					</button>
+				</div>
 			</div>
-			<div v-else class="row" style="margin-top: 12px">
-				<button
-					class="btn btn-danger"
-					type="button"
-					@click="removeFriend"
-					:disabled="removeBusy"
-				>
-					{{ removeBusy ? 'Wiping…' : `Yes, remove ${local.name} permanently` }}
-				</button>
-				<button
-					class="btn btn-ghost"
-					type="button"
-					@click="confirmingRemove = false"
-					:disabled="removeBusy"
-				>
-					Cancel
-				</button>
-			</div>
-		</div>
+		</details>
 	</div>
 </template>
 
@@ -920,13 +941,52 @@ async function removeFriend() {
 		margin-top: 4px;
 	}
 
-	.danger-zone {
-		border-color: color-mix(in oklab, var(--danger) 25%, var(--line));
+	/* Manage friend — same collapsible pattern as the Drive card. */
+	.manage-card {
+		padding: 0;
 	}
 
-	.danger-eyebrow::before {
-		background: var(--danger);
-		box-shadow: 0 0 0 4px
-			color-mix(in oklab, var(--danger) 18%, transparent);
+	.manage-summary {
+		list-style: none;
+		cursor: pointer;
+		padding: 18px 22px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 14px;
+		transition: background var(--dur-hover);
+	}
+
+	.manage-summary::-webkit-details-marker,
+	.manage-summary::marker {
+		display: none;
+	}
+
+	.manage-summary:hover {
+		background: color-mix(in oklab, var(--danger) 4%, var(--panel));
+	}
+
+	.manage-summary-text {
+		min-width: 0;
+		flex: 1;
+	}
+
+	.manage-chev {
+		width: 16px;
+		height: 16px;
+		color: var(--fg-3);
+		flex-shrink: 0;
+		transition: transform 0.25s var(--ease-out), color var(--dur-hover);
+	}
+
+	.manage-card[open] .manage-chev {
+		transform: rotate(180deg);
+		color: var(--danger-fg);
+	}
+
+	.manage-body {
+		padding: 0 22px 22px;
+		border-top: 1px solid var(--line-2);
+		padding-top: 18px;
 	}
 </style>
