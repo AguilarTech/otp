@@ -398,7 +398,34 @@ fn available_space(path: &Path) -> std::io::Result<u64> {
     Ok((buf.f_bavail as u64).saturating_mul(buf.f_frsize as u64))
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn available_space(path: &Path) -> std::io::Result<u64> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let mut free_bytes_available: u64 = 0;
+    let ok = unsafe {
+        GetDiskFreeSpaceExW(
+            wide.as_ptr(),
+            &mut free_bytes_available,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+
+    if ok == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(free_bytes_available)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn available_space(_path: &Path) -> std::io::Result<u64> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
