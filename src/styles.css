@@ -594,6 +594,99 @@ label {
 }
 
 /* ============================================================
+   Accordion (native <details>/<summary> with a styled chevron)
+   ============================================================ */
+.faq {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.faq-item {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: var(--r-card);
+	box-shadow: var(--shadow-card);
+	overflow: hidden;
+	transition: border-color var(--dur-hover);
+}
+
+.faq-item[open] {
+	border-color: color-mix(in oklab, var(--accent) 25%, var(--line));
+}
+
+.faq-item summary {
+	list-style: none;
+	cursor: pointer;
+	padding: 16px 22px;
+	font-family: var(--sans);
+	font-weight: 600;
+	font-size: 15px;
+	color: var(--fg);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	transition: background var(--dur-hover);
+}
+
+.faq-item summary::-webkit-details-marker {
+	display: none;
+}
+
+.faq-item summary::marker {
+	display: none;
+}
+
+.faq-item summary:hover {
+	background: color-mix(in oklab, var(--accent) 4%, var(--panel));
+}
+
+.faq-item summary:focus-visible {
+	outline: none;
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.faq-chev {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	color: var(--accent);
+	transition: transform 0.25s var(--ease-out);
+}
+
+.faq-item[open] .faq-chev {
+	transform: rotate(180deg);
+}
+
+.faq-body {
+	padding: 0 22px 18px;
+	color: var(--fg-2);
+	font-size: 13.5px;
+	line-height: 1.65;
+}
+
+.faq-body p {
+	margin: 0 0 10px;
+	font-size: 13.5px;
+	line-height: 1.65;
+	color: var(--fg-2);
+}
+
+.faq-body p:last-child {
+	margin-bottom: 0;
+}
+
+.faq-body strong {
+	color: var(--fg);
+	font-weight: 700;
+}
+
+.faq-body code {
+	font-size: 12.5px;
+}
+
+/* ============================================================
    Range slider (used in CreatePairing for the pad-size %)
    ============================================================ */
 .slider {
