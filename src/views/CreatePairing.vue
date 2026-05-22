@@ -8,28 +8,42 @@ const emit = defineEmits(['done', 'cancel'])
 // Always keep a buffer for the sidecar + other files on the stick.
 const BUFFER_MB = 100
 
+// Manual-fallback slider range (used when free-space detection fails).
+// Log-scaled so small values are tunable and the high end still reaches 16 GB.
+const MANUAL_MAX_MB = 16384
+const MANUAL_LOG_MAX = Math.log10(MANUAL_MAX_MB)
+
 const name = ref('')
 const hint = ref('')
 const usbDir = ref('')
 const freeBytes = ref(null)
 const usableMb = ref(0)
 const percent = ref(95)
-const manualMb = ref(1024)
+const manualPercent = ref(71) // ≈ 1 GB by default
 const busy = ref(false)
 const error = ref('')
 const detectError = ref('')
 
-const knowsFreeSpace = computed(() => freeBytes.value != null && usableMb.value > 0)
+const knowsFreeSpace = computed(
+	() => freeBytes.value != null && usableMb.value > 0,
+)
 
 const freeMb = computed(() =>
 	freeBytes.value != null ? Math.floor(freeBytes.value / (1024 * 1024)) : null,
 )
 
+const manualMb = computed(() => {
+	const p = Math.max(0, Math.min(100, manualPercent.value))
+	const raw = Math.pow(10, (p / 100) * MANUAL_LOG_MAX)
+	if (raw < 10) return Math.max(1, Math.round(raw))
+	return Math.max(1, Math.round(raw / 10) * 10)
+})
+
 const padSizeMb = computed(() => {
 	if (knowsFreeSpace.value) {
 		return Math.max(1, Math.floor((usableMb.value * percent.value) / 100))
 	}
-	return Math.max(1, Number(manualMb.value) || 0)
+	return manualMb.value
 })
 
 const padSizeLabel = computed(() => {
@@ -213,21 +227,29 @@ async function generate() {
 				</div>
 			</div>
 
-			<!-- Manual mode (free space not detectable) -->
+			<!-- Manual mode (free space not detectable): same drag-style slider
+				 on a log scale so tiny and large values are both reachable. -->
 			<div class="field" v-else-if="usbDir">
 				<label class="slider-label">
-					<span>Key file size (MB)</span>
+					<span>Key file size</span>
 					<span class="slider-value">{{ padSizeLabel }}</span>
 				</label>
 				<input
-					v-model.number="manualMb"
-					type="number"
-					min="1"
+					type="range"
+					class="slider"
+					min="0"
+					max="100"
+					v-model.number="manualPercent"
+					:style="{ '--fill': manualPercent + '%' }"
 					:disabled="busy"
 				/>
+				<div class="slider-scale">
+					<span>1 MB</span>
+					<span>16 GB</span>
+				</div>
 				<div class="field-hint">
-					Pick a size in MB. Bigger key file = more messages before
-					you need a fresh swap.
+					Bigger key file = more messages before you need a fresh
+					swap. Drag right for more.
 				</div>
 			</div>
 
