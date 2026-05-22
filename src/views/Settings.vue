@@ -25,7 +25,8 @@ onMounted(refresh)
 
 async function connect() {
 	error.value = ''
-	info.value = 'A browser tab opened to Google. Approve drive.file access and return here.'
+	info.value =
+		'A browser tab opened to Google. Approve drive.file access and return here.'
 	busy.value = true
 	try {
 		await invoke('oauth_connect')
@@ -56,145 +57,123 @@ async function disconnect() {
 
 <template>
 	<div>
-		<header>
-			<button @click="emit('back')" class="ghost" :disabled="busy">← Back</button>
-			<h1>Settings</h1>
-		</header>
+		<button
+			class="btn btn-ghost back"
+			type="button"
+			@click="emit('back')"
+			:disabled="busy"
+		>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<path d="M19 12H5" /><path d="M11 18l-6-6 6-6" />
+			</svg>
+			Back
+		</button>
 
-		<section>
-			<h2>Google Drive</h2>
+		<div class="eyebrow">Settings</div>
+		<h1 class="h1">Transport &amp; account.</h1>
 
-			<div v-if="!status.client_configured" class="warn">
-				OAuth client credentials were not embedded at build time. See
-				<code>CLOUD_SETUP.md</code> for the Google Cloud console steps,
-				then rebuild with <code>OTP_GOOGLE_CLIENT_ID</code> and
-				<code>OTP_GOOGLE_CLIENT_SECRET</code> set in the environment.
-			</div>
-
-			<div v-else-if="!status.picker_configured" class="warn">
-				OAuth is configured but the Google Picker API key isn't.
-				Cross-account folder claiming will be disabled — both peers must
-				use the same Google identity, or use the manual paste flow.
-				Set <code>OTP_GOOGLE_API_KEY</code> and rebuild (see
-				<code>CLOUD_SETUP.md</code>).
-			</div>
-
-			<div v-if="status.client_configured">
-				<div class="status">
-					<span :class="['dot', status.connected ? 'on' : 'off']"></span>
+		<div class="card">
+			<div class="card-head">
+				<div>
+					<div class="h2" style="margin-bottom: 4px">Google Drive</div>
+					<p class="small" style="margin: 0">
+						OAuth2 with the narrow <code>drive.file</code> scope. Refresh
+						token lives in the OS keychain.
+					</p>
+				</div>
+				<span
+					class="pill"
+					:class="status.connected ? 'pill-success' : 'pill-neutral'"
+				>
+					<span class="dot" :class="{ pulse: status.connected }"></span>
 					{{ status.connected ? 'Connected' : 'Not connected' }}
-				</div>
-				<div class="actions">
-					<button
-						v-if="!status.connected"
-						@click="connect"
-						:disabled="busy"
-					>
-						{{ busy ? 'Waiting for browser…' : 'Connect Google Drive' }}
-					</button>
-					<button
-						v-else
-						@click="disconnect"
-						class="ghost"
-						:disabled="busy"
-					>
-						Disconnect
-					</button>
+				</span>
+			</div>
+
+			<div v-if="!status.client_configured" class="banner banner-warn">
+				<div>
+					<strong>OAuth client credentials not embedded.</strong>
+					Rebuild with <code>OTP_GOOGLE_CLIENT_ID</code> and
+					<code>OTP_GOOGLE_CLIENT_SECRET</code> set in the environment.
+					See <code>CLOUD_SETUP.md</code>.
 				</div>
 			</div>
-		</section>
 
-		<div v-if="info" class="info">{{ info }}</div>
-		<div v-if="error" class="error">{{ error }}</div>
+			<div
+				v-else-if="!status.picker_configured"
+				class="banner banner-warn"
+			>
+				<div>
+					OAuth is configured but the Google Picker API key isn't.
+					Cross-account folder claiming will stay disabled. Set
+					<code>OTP_GOOGLE_API_KEY</code> and rebuild — see
+					<code>CLOUD_SETUP.md</code>.
+				</div>
+			</div>
 
-		<section>
-			<h2>About</h2>
-			<p class="help">
-				Pad material lives in this device's app data dir. Plaintext is
-				dropped from memory when you dismiss messages — no persistent
-				history is kept. Drive sees ciphertext blob sizes and timing;
-				it never sees plaintext or pad bytes.
+			<div v-if="status.client_configured" class="row" style="margin-top: 16px">
+				<button
+					v-if="!status.connected"
+					class="btn btn-primary"
+					type="button"
+					@click="connect"
+					:disabled="busy"
+				>
+					{{ busy ? 'Waiting for browser…' : 'Connect Google Drive' }}
+					<svg
+						v-if="!busy"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.8"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M5 12h14" /><path d="M13 6l6 6-6 6" />
+					</svg>
+				</button>
+				<button
+					v-else
+					class="btn btn-ghost"
+					type="button"
+					@click="disconnect"
+					:disabled="busy"
+				>
+					Disconnect
+				</button>
+			</div>
+
+			<div v-if="info" class="banner banner-success" style="margin-top: 16px">
+				{{ info }}
+			</div>
+			<div v-if="error" class="banner banner-error" style="margin-top: 16px">
+				{{ error }}
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="h2">About</div>
+			<p>
+				Pad material lives in this device's app data directory. Plaintext
+				is dropped from memory when you dismiss messages — no persistent
+				history is kept. Google Drive sees ciphertext blob sizes and
+				timing; it never sees plaintext or pad bytes.
 			</p>
-		</section>
+		</div>
 	</div>
 </template>
 
 <style scoped>
-	header {
+	.back {
+		margin-bottom: 18px;
+	}
+
+	.card-head {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
+		justify-content: space-between;
 		gap: 16px;
 		margin-bottom: 16px;
-	}
-	header h1 {
-		margin: 0;
-	}
-	.ghost {
-		background: transparent;
-	}
-	section {
-		margin-bottom: 24px;
-		text-align: left;
-	}
-	h2 {
-		font-size: 1em;
-		color: #aaa;
-		margin: 0 0 8px 0;
-	}
-	.status {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-size: 0.9em;
-		color: #ccc;
-		margin-bottom: 8px;
-	}
-	.dot {
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		display: inline-block;
-	}
-	.dot.on {
-		background: #4caf50;
-	}
-	.dot.off {
-		background: #666;
-	}
-	.actions {
-		display: flex;
-		gap: 8px;
-	}
-	.warn {
-		background: #2a2410;
-		color: #d0c070;
-		padding: 12px;
-		border-radius: 6px;
-		font-size: 0.9em;
-		line-height: 1.5;
-	}
-	.warn code {
-		background: #1f1f1f;
-		padding: 1px 5px;
-		border-radius: 3px;
-	}
-	.info {
-		color: #8acc8a;
-		padding: 8px;
-		background: #1a2a1a;
-		border-radius: 6px;
-		margin-bottom: 12px;
-	}
-	.error {
-		color: #ff7070;
-		padding: 8px;
-		background: #2a1a1a;
-		border-radius: 6px;
-		margin-bottom: 12px;
-	}
-	.help {
-		color: #888;
-		font-size: 0.85em;
-		line-height: 1.5;
 	}
 </style>

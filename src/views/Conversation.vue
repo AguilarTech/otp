@@ -56,6 +56,7 @@ onMounted(async () => {
 			text: m.plaintext,
 			source: 'drive',
 		})
+		void refreshLocal()
 	})
 })
 
@@ -80,7 +81,7 @@ async function send() {
 		outUploaded.value = result.uploaded_file_id
 		draft.value = ''
 		if (result.uploaded_file_id) {
-			info.value = `Uploaded to Drive (file id ${result.uploaded_file_id.slice(0, 8)}…).`
+			info.value = `Uploaded to Drive — file id ${result.uploaded_file_id.slice(0, 8)}…`
 		}
 		await refreshLocal()
 	} catch (e) {
@@ -145,13 +146,13 @@ async function createDriveFolder() {
 	info.value = ''
 	driveBusy.value = true
 	try {
-		const folderId = await invoke('drive_create_folder', {
+		await invoke('drive_create_folder', {
 			pairingId: local.value.id,
 			peerEmail: peerEmail.value.trim(),
 		})
 		info.value = peerEmail.value.trim()
-			? `Folder created and shared with ${peerEmail.value.trim()} (Drive sent them an invite).`
-			: 'Folder created (not shared — bind it on the peer side manually).'
+			? `Folder created and shared with ${peerEmail.value.trim()} (Drive sent an invite).`
+			: 'Folder created. Bind it on the peer side manually.'
 		peerEmail.value = ''
 		await refreshLocal()
 		emit('pairing-changed')
@@ -176,7 +177,8 @@ async function bindDriveFolder() {
 			pairingId: local.value.id,
 			folderId,
 		})
-		info.value = 'Folder bound. Background polling will pick up new messages every ~30s.'
+		info.value =
+			'Folder bound. Background polling will pick up new messages every ~30s.'
 		folderToBind.value = ''
 		await refreshLocal()
 		emit('pairing-changed')
@@ -189,7 +191,8 @@ async function bindDriveFolder() {
 
 async function pickDriveFolder() {
 	error.value = ''
-	info.value = 'A browser tab opened with Google Picker. Pick the folder a peer shared with you, then return here.'
+	info.value =
+		'A browser tab opened with Google Picker. Pick the folder a peer shared with you and return here.'
 	driveBusy.value = true
 	try {
 		await invoke('drive_pick_folder', { pairingId: local.value.id })
@@ -221,8 +224,6 @@ async function unbindDriveFolder() {
 }
 
 function extractFolderId(input) {
-	// Accept either a raw id or a Drive URL like
-	// https://drive.google.com/drive/folders/<id>?usp=sharing
 	const m = input.match(/folders\/([a-zA-Z0-9_-]+)/)
 	return m ? m[1] : input
 }
@@ -230,284 +231,327 @@ function extractFolderId(input) {
 
 <template>
 	<div>
-		<header>
-			<button @click="emit('back')" class="ghost">← Back</button>
-			<h1>{{ local.name }}</h1>
-		</header>
+		<button class="btn btn-ghost back" type="button" @click="emit('back')">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<path d="M19 12H5" /><path d="M11 18l-6-6 6-6" />
+			</svg>
+			Back
+		</button>
 
-		<section class="drive">
-			<h2>Drive mailbox</h2>
-			<div v-if="!oauthStatus.client_configured" class="hint">
-				OAuth not configured — Settings → see CLOUD_SETUP.md.
-			</div>
-			<div v-else-if="!oauthStatus.connected" class="hint">
-				Connect Google Drive in Settings to enable auto-upload and polling.
-			</div>
-			<div v-else-if="driveBound">
-				<div class="bound">
-					<span :class="['dot', autoUploadActive ? 'on' : 'off']"></span>
-					Bound to folder
-					<code>{{ local.drive_folder_id.slice(0, 16) }}…</code>
-					— auto-upload + poll active.
+		<div class="eyebrow">Pairing</div>
+		<h1 class="h1">{{ local.name }}</h1>
+
+		<div class="card">
+			<div class="card-head">
+				<div>
+					<div class="h2" style="margin-bottom: 4px">Drive mailbox</div>
+					<p class="small" style="margin: 0">
+						Each pairing gets its own Drive folder. Both peers upload
+						ciphertext blobs; the poller verifies and pulls them down.
+					</p>
 				</div>
-				<div class="row">
-					<button class="ghost" @click="unbindDriveFolder" :disabled="driveBusy">
-						Unbind
-					</button>
-				</div>
+				<span
+					class="pill"
+					:class="autoUploadActive ? 'pill-success' : driveBound ? 'pill-neutral' : 'pill-neutral'"
+				>
+					<span class="dot" :class="{ pulse: autoUploadActive }"></span>
+					{{
+						autoUploadActive
+							? 'Auto-upload + poll'
+							: driveBound
+								? 'Bound, drive offline'
+								: 'Not bound'
+					}}
+				</span>
 			</div>
-			<div v-else>
-				<div class="sub">
+
+			<div v-if="!oauthStatus.client_configured" class="banner banner-warn">
+				OAuth client not configured. Settings → see
+				<code>CLOUD_SETUP.md</code>.
+			</div>
+			<div
+				v-else-if="!oauthStatus.connected"
+				class="banner banner-info"
+			>
+				Connect Google Drive in Settings to enable auto-upload and
+				polling.
+			</div>
+
+			<div v-if="driveBound" class="bound-row">
+				<div>
+					<div class="small" style="margin-bottom: 4px">Folder</div>
+					<code class="mono">{{ local.drive_folder_id }}</code>
+				</div>
+				<button
+					class="btn btn-danger"
+					type="button"
+					@click="unbindDriveFolder"
+					:disabled="driveBusy"
+				>
+					Unbind
+				</button>
+			</div>
+
+			<div v-else-if="oauthStatus.connected" class="drive-options">
+				<div class="drive-sub">
 					<label>Create a new mailbox folder in your Drive</label>
-					<div class="row">
+					<div class="combo">
 						<input
 							v-model="peerEmail"
 							placeholder="Peer's Google email (optional — sends Drive invite)"
 							:disabled="driveBusy"
 						/>
-						<button @click="createDriveFolder" :disabled="driveBusy">
+						<button
+							class="btn btn-primary"
+							type="button"
+							@click="createDriveFolder"
+							:disabled="driveBusy"
+						>
 							Create
 						</button>
 					</div>
 				</div>
-				<div class="sub">
+
+				<div class="drive-sub">
 					<label>Claim a folder a peer shared with you (cross-account)</label>
 					<div class="row">
 						<button
+							class="btn btn-primary"
+							type="button"
 							@click="pickDriveFolder"
 							:disabled="driveBusy || !oauthStatus.picker_configured"
 						>
 							{{ driveBusy ? 'Waiting for picker…' : 'Pick from Google Drive' }}
+							<svg
+								v-if="!driveBusy"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<path d="M5 12h14" /><path d="M13 6l6 6-6 6" />
+							</svg>
 						</button>
 					</div>
-					<div v-if="!oauthStatus.picker_configured" class="hint warn">
-						Picker API key not configured at build time. See
-						<code>CLOUD_SETUP.md</code> and rebuild with
-						<code>OTP_GOOGLE_API_KEY</code> set.
+					<div v-if="!oauthStatus.picker_configured" class="field-hint">
+						Picker API key not configured. Set
+						<code>OTP_GOOGLE_API_KEY</code> and rebuild — see
+						<code>CLOUD_SETUP.md</code>.
 					</div>
-					<div v-else class="hint">
+					<div v-else class="field-hint">
 						Opens Google Picker in your browser. Select the shared folder
 						under "Shared with me". This is the only way to bind a folder
-						owned by a different account under <code>drive.file</code> scope.
+						owned by another account under
+						<code>drive.file</code> scope.
 					</div>
 				</div>
-				<div class="sub">
+
+				<div class="drive-sub">
 					<label>Or paste a folder ID directly (same account only)</label>
-					<div class="row">
+					<div class="combo">
 						<input
 							v-model="folderToBind"
 							placeholder="Drive folder URL or ID"
 							:disabled="driveBusy"
 						/>
-						<button @click="bindDriveFolder" :disabled="driveBusy">
+						<button
+							class="btn btn-ghost"
+							type="button"
+							@click="bindDriveFolder"
+							:disabled="driveBusy"
+						>
 							Bind
 						</button>
 					</div>
-					<div class="hint">
-						Verifies the app can already see the folder under
-						<code>drive.file</code> (it can if your app created it). If
-						the folder is owned by another account use Pick above.
-					</div>
 				</div>
 			</div>
-		</section>
+		</div>
 
-		<section>
-			<h2>Compose</h2>
+		<div class="card">
+			<div class="eyebrow">Compose</div>
 			<textarea
 				v-model="draft"
 				placeholder="Type a message…"
 				rows="3"
 				:disabled="busy"
 			/>
-			<div class="row">
-				<button @click="send" :disabled="busy">
+			<div class="row" style="margin-top: 12px">
+				<button
+					class="btn btn-primary"
+					type="button"
+					@click="send"
+					:disabled="busy"
+				>
 					{{ autoUploadActive ? 'Encrypt &amp; upload' : 'Encrypt' }}
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M5 12h14" /><path d="M13 6l6 6-6 6" />
+					</svg>
 				</button>
 			</div>
-			<div v-if="outFrame" class="frame">
-				<label v-if="outUploaded">
-					Uploaded to Drive. Manual fallback frame:
-				</label>
-				<label v-else>Frame to send (paste into your transport):</label>
+
+			<div v-if="outFrame" class="frame-out">
+				<div class="eyebrow" style="margin-top: 18px">
+					{{ outUploaded ? 'Manual fallback' : 'Frame to send' }}
+				</div>
 				<textarea :value="outFrame" readonly rows="3" />
-				<div class="row">
-					<button @click="copyOut">Copy</button>
-					<button @click="clearOut" class="ghost">Clear</button>
+				<div class="row" style="margin-top: 8px">
+					<button class="btn btn-ghost" type="button" @click="copyOut">
+						Copy
+					</button>
+					<button class="btn btn-ghost" type="button" @click="clearOut">
+						Clear
+					</button>
 				</div>
 			</div>
-		</section>
+		</div>
 
-		<section>
-			<h2>Receive (manual)</h2>
+		<div class="card">
+			<div class="eyebrow">Receive (manual)</div>
 			<textarea
 				v-model="inFrame"
 				placeholder="Paste a frame to decode…"
 				rows="3"
 				:disabled="busy"
 			/>
-			<div class="row">
-				<button @click="receive" :disabled="busy">Decode</button>
+			<div class="row" style="margin-top: 12px">
+				<button
+					class="btn btn-primary"
+					type="button"
+					@click="receive"
+					:disabled="busy"
+				>
+					Decode
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M5 12h14" /><path d="M13 6l6 6-6 6" />
+					</svg>
+				</button>
 			</div>
-		</section>
+		</div>
 
-		<section v-if="inbox.length">
-			<h2>Inbox (session only)</h2>
+		<div v-if="inbox.length" class="card">
+			<div class="eyebrow">Inbox · session only</div>
 			<div v-for="m in inbox" :key="m.id" class="msg">
 				<div class="msg-head">
-					<span class="seq">#{{ m.seq }}</span>
-					<span class="ts">{{ formatTs(m.ts) }}</span>
-					<span class="src">{{ m.source }}</span>
-					<button class="ghost" @click="dismiss(m.id)">Dismiss</button>
+					<span class="msg-seq">#{{ m.seq }}</span>
+					<span class="msg-ts">{{ formatTs(m.ts) }}</span>
+					<span class="pill" :class="m.source === 'drive' ? 'pill-accent' : 'pill-neutral'">
+						{{ m.source }}
+					</span>
+					<button
+						class="btn btn-ghost btn-dismiss"
+						type="button"
+						@click="dismiss(m.id)"
+					>
+						Dismiss
+					</button>
 				</div>
 				<pre>{{ m.text }}</pre>
 			</div>
-		</section>
+		</div>
 
-		<div v-if="info" class="info">{{ info }}</div>
-		<div v-if="error" class="error">{{ error }}</div>
+		<div v-if="info" class="banner banner-success">{{ info }}</div>
+		<div v-if="error" class="banner banner-error">{{ error }}</div>
 	</div>
 </template>
 
 <style scoped>
-	header {
+	.back {
+		margin-bottom: 18px;
+	}
+
+	.card-head {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
+		justify-content: space-between;
 		gap: 16px;
 		margin-bottom: 16px;
 	}
-	header h1 {
-		margin: 0;
+
+	.bound-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		background: var(--panel-2);
+		border: 1px solid var(--line);
+		border-radius: var(--r-panel);
+		padding: 12px 14px;
 	}
-	.ghost {
-		background: transparent;
+
+	.bound-row code {
+		word-break: break-all;
 	}
-	section {
-		margin-bottom: 24px;
-		text-align: left;
+
+	.drive-options {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
 	}
-	h2 {
-		font-size: 1em;
-		color: #aaa;
-		margin: 0 0 8px 0;
+
+	.drive-sub {
+		display: flex;
+		flex-direction: column;
 	}
-	textarea {
-		width: 100%;
-		box-sizing: border-box;
-		font-family: inherit;
-		resize: vertical;
-	}
-	.row {
+
+	.combo {
 		display: flex;
 		gap: 8px;
-		margin-top: 8px;
 	}
-	.row input {
+
+	.combo input {
 		flex: 1;
 	}
-	.frame {
-		margin-top: 12px;
-	}
-	.frame label {
-		font-size: 0.8em;
-		color: #888;
-	}
-	.drive .sub {
-		margin-bottom: 12px;
-	}
-	.drive .sub label {
-		font-size: 0.8em;
-		color: #888;
-		display: block;
-		margin-bottom: 4px;
-	}
-	.bound {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-size: 0.9em;
-		color: #ccc;
-	}
-	.bound code {
-		background: #1f1f1f;
-		padding: 1px 5px;
-		border-radius: 3px;
-		font-size: 0.85em;
-	}
-	.dot {
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		display: inline-block;
-	}
-	.dot.on {
-		background: #4caf50;
-	}
-	.dot.off {
-		background: #666;
-	}
-	.hint {
-		font-size: 0.85em;
-		color: #888;
+
+	.frame-out {
 		margin-top: 4px;
 	}
-	.hint.warn {
-		background: #2a2410;
-		color: #d0c070;
-		padding: 8px;
-		border-radius: 4px;
-		margin-top: 8px;
-		line-height: 1.5;
-	}
+
 	.msg {
-		background: #2a2a2a;
-		padding: 12px;
-		border-radius: 6px;
-		margin-bottom: 8px;
+		background: var(--panel-2);
+		border: 1px solid var(--line);
+		border-radius: var(--r-panel);
+		padding: 14px 16px;
+		margin-bottom: 10px;
 	}
+
+	.msg:last-child {
+		margin-bottom: 0;
+	}
+
 	.msg-head {
 		display: flex;
-		gap: 12px;
+		gap: 10px;
 		align-items: center;
-		font-size: 0.8em;
-		color: #999;
-		margin-bottom: 4px;
+		margin-bottom: 8px;
 	}
-	.src {
-		text-transform: uppercase;
-		font-size: 0.7em;
-		color: #888;
-		background: #1f1f1f;
-		padding: 1px 6px;
-		border-radius: 3px;
-		letter-spacing: 0.05em;
+
+	.msg-seq {
+		font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+		font-size: 11px;
+		color: var(--fg-3);
 	}
-	.msg-head button {
+
+	.msg-ts {
+		font-size: 12px;
+		color: var(--fg-3);
+	}
+
+	.btn-dismiss {
 		margin-left: auto;
-		font-size: 0.85em;
-		padding: 2px 8px;
+		padding: 6px 12px;
+		font-size: 12px;
 	}
+
 	.msg pre {
 		margin: 0;
+		font-family: var(--sans);
+		font-size: 14px;
+		color: var(--fg);
 		white-space: pre-wrap;
 		word-break: break-word;
-		font-family: inherit;
-	}
-	.info {
-		color: #8acc8a;
-		padding: 8px;
-		background: #1a2a1a;
-		border-radius: 6px;
-		margin-top: 12px;
-	}
-	.error {
-		color: #ff7070;
-		padding: 8px;
-		background: #2a1a1a;
-		border-radius: 6px;
-		margin-top: 12px;
-	}
-	.seq {
-		font-family: monospace;
+		line-height: 1.55;
 	}
 </style>

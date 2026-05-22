@@ -51,94 +51,96 @@ async function importPairing() {
 
 <template>
 	<div>
-		<header>
-			<button @click="emit('cancel')" class="ghost" :disabled="busy">← Back</button>
-			<h1>Import pairing</h1>
-		</header>
+		<button
+			class="btn btn-ghost back"
+			type="button"
+			@click="emit('cancel')"
+			:disabled="busy"
+		>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<path d="M19 12H5" /><path d="M11 18l-6-6 6-6" />
+			</svg>
+			Back
+		</button>
 
-		<p class="help">
+		<div class="eyebrow">Import pairing</div>
+		<h1 class="h1">Bring in pad material a peer handed you.</h1>
+		<p class="lead">
 			Pick the folder on the USB drive that contains
 			<code>pairing.toml</code>, <code>A.pad</code>, and
-			<code>B.pad</code>. The pads are copied into local storage; you can
-			wipe the USB afterwards.
+			<code>B.pad</code>. The pads are copied into local app data with the
+			send / receive roles swapped — you can wipe the USB once import
+			finishes.
 		</p>
 
-		<div class="field">
-			<label>Pairing folder on USB</label>
-			<div class="row">
-				<input :value="usbPairingDir" readonly placeholder="No folder selected" />
-				<button @click="pickDir" :disabled="busy">Choose…</button>
+		<div class="card">
+			<div class="field">
+				<label>Pairing folder on USB</label>
+				<div class="combo">
+					<input
+						:value="usbPairingDir"
+						readonly
+						placeholder="No folder selected"
+					/>
+					<button
+						class="btn btn-ghost"
+						type="button"
+						@click="pickDir"
+						:disabled="busy"
+					>
+						Choose…
+					</button>
+				</div>
 			</div>
-		</div>
 
-		<div class="field">
-			<label>Your label for this pairing</label>
-			<input v-model="name" placeholder="e.g. Alice" :disabled="busy" />
-		</div>
+			<div class="field">
+				<label>Your label for this pairing</label>
+				<input
+					v-model="name"
+					placeholder="e.g. Alice"
+					:disabled="busy"
+				/>
+			</div>
 
-		<div v-if="error" class="error">{{ error }}</div>
+			<div v-if="error" class="banner banner-error">{{ error }}</div>
 
-		<div class="actions">
-			<button @click="importPairing" :disabled="busy">
-				{{ busy ? 'Importing…' : 'Import' }}
-			</button>
+			<div class="row-end">
+				<button
+					class="btn btn-primary"
+					type="button"
+					@click="importPairing"
+					:disabled="busy"
+				>
+					{{ busy ? 'Importing…' : 'Import' }}
+					<svg
+						v-if="!busy"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.8"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M5 12h14" /><path d="M13 6l6 6-6 6" />
+					</svg>
+				</button>
+			</div>
 		</div>
 	</div>
 </template>
 
 <style scoped>
-	header {
-		display: flex;
-		align-items: center;
-		gap: 16px;
-		margin-bottom: 16px;
+	.back {
+		margin-bottom: 18px;
 	}
-	header h1 {
-		margin: 0;
-	}
-	.ghost {
-		background: transparent;
-	}
-	.help {
-		color: #aaa;
-		font-size: 0.9em;
-		text-align: left;
-	}
-	.help code {
-		background: #1f1f1f;
-		padding: 2px 6px;
-		border-radius: 4px;
-	}
-	.field {
-		margin-bottom: 16px;
-		text-align: left;
-	}
-	.field label {
-		display: block;
-		font-size: 0.85em;
-		color: #aaa;
-		margin-bottom: 4px;
-	}
-	.field input {
-		width: 100%;
-		box-sizing: border-box;
-	}
-	.row {
+
+	.combo {
 		display: flex;
 		gap: 8px;
 	}
-	.row input {
+
+	.combo input {
 		flex: 1;
-	}
-	.error {
-		color: #ff7070;
-		padding: 8px;
-		background: #2a1a1a;
-		border-radius: 6px;
-		margin-bottom: 12px;
-	}
-	.actions {
-		display: flex;
-		justify-content: flex-end;
 	}
 </style>
