@@ -400,6 +400,7 @@ fn available_space(path: &Path) -> std::io::Result<u64> {
 
 #[cfg(not(unix))]
 fn available_space(_path: &Path) -> std::io::Result<u64> {
+    // Frontend falls back to a manual MB input when this errors.
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
         "available-space detection is not implemented on this platform; enter pad size manually",
