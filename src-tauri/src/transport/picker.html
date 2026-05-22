@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OTP Messenger — Google Drive Picker</title>
+<style>
+	body {
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+		background: #1e1e1e;
+		color: #eee;
+		padding: 40px;
+		margin: 0;
+	}
+	.card {
+		max-width: 600px;
+		background: #2a2a2a;
+		padding: 20px 24px;
+		border-radius: 8px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+	}
+	h2 {
+		margin: 0 0 12px 0;
+	}
+	p {
+		color: #ccc;
+		line-height: 1.5;
+	}
+	.actions {
+		display: flex;
+		gap: 8px;
+		margin-top: 16px;
+	}
+	button {
+		padding: 8px 16px;
+		font-size: 1em;
+		border: 1px solid #444;
+		background: #1a1a1a;
+		color: #eee;
+		border-radius: 6px;
+		cursor: pointer;
+	}
+	button:hover:not(:disabled) {
+		border-color: #4caf50;
+	}
+	button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.error {
+		color: #ff7070;
+		background: #2a1a1a;
+		padding: 8px 12px;
+		border-radius: 4px;
+		margin-top: 12px;
+		display: none;
+	}
+</style>
+</head>
+<body>
+<div class="card">
+	<h2>OTP Messenger</h2>
+	<p id="status">Loading Google Drive Picker…</p>
+	<div class="actions">
+		<button id="open" disabled>Choose folder</button>
+		<button id="cancel">Cancel</button>
+	</div>
+	<div id="error" class="error"></div>
+</div>
+<script src="https://apis.google.com/js/api.js"></script>
+<script>
+(function () {
+	var params = new URLSearchParams(window.location.hash.slice(1));
+	var accessToken = params.get('access_token');
+	var apiKey = params.get('api_key');
+	var appId = params.get('app_id') || '';
+
+	var statusEl = document.getElementById('status');
+	var openBtn = document.getElementById('open');
+	var cancelBtn = document.getElementById('cancel');
+	var errorEl = document.getElementById('error');
+
+	function showError(msg) {
+		errorEl.textContent = msg;
+		errorEl.style.display = 'block';
+	}
+
+	function postResult(folderId) {
+		fetch('/result?folder_id=' + encodeURIComponent(folderId)).finally(function () {
+			statusEl.textContent = 'Folder bound. You can close this tab and return to the app.';
+			openBtn.disabled = true;
+			cancelBtn.disabled = true;
+		});
+	}
+
+	function postCancel() {
+		fetch('/cancel').finally(function () {
+			statusEl.textContent = 'Cancelled. You can close this tab.';
+			openBtn.disabled = true;
+			cancelBtn.disabled = true;
+		});
+	}
+
+	cancelBtn.addEventListener('click', postCancel);
+
+	if (!accessToken || !apiKey) {
+		showError('Missing access token or API key. Retry from the app.');
+		return;
+	}
+
+	if (typeof gapi === 'undefined') {
+		showError('Could not load Google APIs. Check your network and retry.');
+		return;
+	}
+
+	gapi.load('picker', {
+		callback: function () {
+			statusEl.textContent =
+				'Click "Choose folder" and select the mailbox a peer shared with you (look under "Shared with me").';
+			openBtn.disabled = false;
+			openBtn.addEventListener('click', function () {
+				try {
+					var sharedView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+						.setIncludeFolders(true)
+						.setSelectFolderEnabled(true)
+						.setOwnedByMe(false)
+						.setLabel('Shared with me');
+					var myView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+						.setIncludeFolders(true)
+						.setSelectFolderEnabled(true)
+						.setOwnedByMe(true)
+						.setLabel('My Drive');
+					var picker = new google.picker.PickerBuilder()
+						.setOAuthToken(accessToken)
+						.setDeveloperKey(apiKey)
+						.setAppId(appId)
+						.setTitle('Select OTP Messenger mailbox folder')
+						.addView(sharedView)
+						.addView(myView)
+						.setCallback(function (data) {
+							var Action = google.picker.Action;
+							if (data.action === Action.PICKED) {
+								var doc = data.docs && data.docs[0];
+								if (doc && doc.id) {
+									postResult(doc.id);
+								} else {
+									showError('No folder in the picker response.');
+								}
+							} else if (data.action === Action.CANCEL) {
+								postCancel();
+							}
+						})
+						.build();
+					picker.setVisible(true);
+				} catch (err) {
+					showError('Picker failed to open: ' + err);
+				}
+			});
+		},
+		onerror: function (err) {
+			showError('Picker SDK failed to load: ' + (err && err.error ? err.error : err));
+		},
+	});
+})();
+</script>
+</body>
+</html>

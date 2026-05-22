@@ -7,7 +7,11 @@ const props = defineProps({ pairing: { type: Object, required: true } })
 const emit = defineEmits(['back', 'pairing-changed'])
 
 const local = ref({ ...props.pairing })
-const oauthStatus = ref({ configured: false, connected: false })
+const oauthStatus = ref({
+	client_configured: false,
+	picker_configured: false,
+	connected: false,
+})
 
 const driveBound = computed(() => !!local.value.drive_folder_id)
 const autoUploadActive = computed(
@@ -183,6 +187,23 @@ async function bindDriveFolder() {
 	}
 }
 
+async function pickDriveFolder() {
+	error.value = ''
+	info.value = 'A browser tab opened with Google Picker. Pick the folder a peer shared with you, then return here.'
+	driveBusy.value = true
+	try {
+		await invoke('drive_pick_folder', { pairingId: local.value.id })
+		info.value = 'Folder picked and bound. Background polling is active.'
+		await refreshLocal()
+		emit('pairing-changed')
+	} catch (e) {
+		error.value = String(e)
+		info.value = ''
+	} finally {
+		driveBusy.value = false
+	}
+}
+
 async function unbindDriveFolder() {
 	error.value = ''
 	info.value = ''
@@ -216,7 +237,7 @@ function extractFolderId(input) {
 
 		<section class="drive">
 			<h2>Drive mailbox</h2>
-			<div v-if="!oauthStatus.configured" class="hint">
+			<div v-if="!oauthStatus.client_configured" class="hint">
 				OAuth not configured — Settings → see CLOUD_SETUP.md.
 			</div>
 			<div v-else-if="!oauthStatus.connected" class="hint">
@@ -250,7 +271,28 @@ function extractFolderId(input) {
 					</div>
 				</div>
 				<div class="sub">
-					<label>Or bind an existing folder (e.g. one a peer shared with you)</label>
+					<label>Claim a folder a peer shared with you (cross-account)</label>
+					<div class="row">
+						<button
+							@click="pickDriveFolder"
+							:disabled="driveBusy || !oauthStatus.picker_configured"
+						>
+							{{ driveBusy ? 'Waiting for picker…' : 'Pick from Google Drive' }}
+						</button>
+					</div>
+					<div v-if="!oauthStatus.picker_configured" class="hint warn">
+						Picker API key not configured at build time. See
+						<code>CLOUD_SETUP.md</code> and rebuild with
+						<code>OTP_GOOGLE_API_KEY</code> set.
+					</div>
+					<div v-else class="hint">
+						Opens Google Picker in your browser. Select the shared folder
+						under "Shared with me". This is the only way to bind a folder
+						owned by a different account under <code>drive.file</code> scope.
+					</div>
+				</div>
+				<div class="sub">
+					<label>Or paste a folder ID directly (same account only)</label>
 					<div class="row">
 						<input
 							v-model="folderToBind"
@@ -261,11 +303,10 @@ function extractFolderId(input) {
 							Bind
 						</button>
 					</div>
-					<div class="hint warn">
-						With drive.file scope, the peer's app can only see this folder
-						if they claim it via Google Picker. Picker integration ships in
-						Phase 4b. For now use the same Google account on both ends, or
-						the manual paste flow below.
+					<div class="hint">
+						Verifies the app can already see the folder under
+						<code>drive.file</code> (it can if your app created it). If
+						the folder is owned by another account use Pick above.
 					</div>
 				</div>
 			</div>

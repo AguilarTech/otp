@@ -209,6 +209,45 @@ async fn drive_bind_folder(
 }
 
 #[tauri::command]
+async fn drive_pick_folder(
+    state: State<'_, AppState>,
+    pairing_id: String,
+) -> Result<String, String> {
+    let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
+    let api_key = transport::api_key()
+        .ok_or_else(|| transport::TransportError::PickerNotConfigured.to_string())?;
+    let app_id = transport::app_id().unwrap_or_default();
+    let access_token = state
+        .transport
+        .access_token()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let folder_id = transport::picker::run_picker_flow(transport::picker::PickerInputs {
+        access_token: &access_token,
+        api_key,
+        app_id: &app_id,
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Verify drive.file scope now sees the folder (Picker should have
+    // granted it). If get fails, something's off — surface to the user
+    // before persisting the binding.
+    let drive = DriveClient::new(state.transport.clone());
+    drive
+        .get_folder(&folder_id)
+        .await
+        .map_err(|e| format!("picker returned a folder but drive.file cannot see it: {}", e))?;
+
+    state
+        .vault
+        .set_drive_folder_id(&id, folder_id.clone())
+        .map_err(|e| e.to_string())?;
+    Ok(folder_id)
+}
+
+#[tauri::command]
 fn drive_unbind_folder(
     state: State<'_, AppState>,
     pairing_id: String,
@@ -276,6 +315,7 @@ fn main() {
             oauth_disconnect,
             drive_create_folder,
             drive_bind_folder,
+            drive_pick_folder,
             drive_unbind_folder,
         ])
         .run(tauri::generate_context!())
