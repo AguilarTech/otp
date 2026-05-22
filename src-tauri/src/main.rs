@@ -1,411 +1,283 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-extern crate rand;
-use base64::{decode, encode};
-use chrono::Utc;
-use rand::rngs::OsRng;
-use rand::RngCore;
-use serde_json::json;
-use serde_json::Value;
-use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter, Read, Write};
-use std::path::Path;
+mod transport;
+mod vault;
 
-// Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-fn main() {
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![generate_otp_key, encrypt, decrypt])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
+
+use base64::Engine;
+use serde::Serialize;
+use tauri::{Manager, State};
+use uuid::Uuid;
+
+use transport::{ConnectionStatus, DriveClient, Transport};
+use vault::{PairingInfo, Vault};
+
+const POLL_INTERVAL: Duration = Duration::from_secs(30);
+const DRIVE_FOLDER_NAME_PREFIX: &str = "otp-msgr";
+
+struct AppState {
+    vault: Arc<Vault>,
+    transport: Arc<Transport>,
+}
+
+#[derive(Serialize)]
+struct DecryptResultDto {
+    pairing_id: String,
+    seq: u64,
+    timestamp_ms: u64,
+    plaintext: String,
+}
+
+#[derive(Serialize)]
+struct SendResultDto {
+    /// Always present — opaque base64 frame.
+    frame: String,
+    /// When Drive is connected and the pairing has a folder bound, the
+    /// frame is uploaded automatically and this is the Drive file id.
+    uploaded_file_id: Option<String>,
 }
 
 #[tauri::command]
-fn generate_otp_key(
-    file_path: String,
-    file_size: u64,
-    window: tauri::Window,
+fn list_pairings(state: State<'_, AppState>) -> Result<Vec<PairingInfo>, String> {
+    state.vault.list_pairings().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn create_pairing(
+    state: State<'_, AppState>,
+    name: String,
+    originator_hint: String,
+    pad_size_bytes: u64,
+    usb_dir: String,
+) -> Result<PairingInfo, String> {
+    state
+        .vault
+        .create_and_export_pairing(name, originator_hint, pad_size_bytes, &PathBuf::from(usb_dir))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn import_pairing(
+    state: State<'_, AppState>,
+    name: String,
+    usb_pairing_dir: String,
+) -> Result<PairingInfo, String> {
+    state
+        .vault
+        .import_pairing_from_usb(name, &PathBuf::from(usb_pairing_dir))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn send_message(
+    state: State<'_, AppState>,
+    pairing_id: String,
+    plaintext: String,
+) -> Result<SendResultDto, String> {
+    let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
+    let frame_bytes = state
+        .vault
+        .encrypt(&id, plaintext.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let frame_b64 = base64::engine::general_purpose::STANDARD.encode(&frame_bytes);
+
+    // Look up folder binding (snapshot).
+    let folder_id = state
+        .vault
+        .list_pairings()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|p| p.id == id)
+        .map(|p| p.drive_folder_id)
+        .unwrap_or_default();
+
+    let mut uploaded_file_id = None;
+    if !folder_id.is_empty() && state.transport.status().connected {
+        let drive = DriveClient::new(state.transport.clone());
+        let blob_name = format!("{}.bin", Uuid::new_v4());
+        match drive.upload(&folder_id, &blob_name, &frame_bytes).await {
+            Ok(file_id) => uploaded_file_id = Some(file_id),
+            Err(e) => {
+                return Err(format!(
+                    "frame encrypted and pad consumed, but Drive upload failed: {}. \
+                     Copy the frame manually as a fallback.",
+                    e
+                ));
+            }
+        }
+    }
+
+    Ok(SendResultDto {
+        frame: frame_b64,
+        uploaded_file_id,
+    })
+}
+
+#[tauri::command]
+fn decrypt_message(
+    state: State<'_, AppState>,
+    frame_b64: String,
+) -> Result<DecryptResultDto, String> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(frame_b64.trim())
+        .map_err(|e| format!("invalid base64: {}", e))?;
+    let msg = state.vault.decrypt(&bytes).map_err(|e| e.to_string())?;
+    let plaintext = std::str::from_utf8(&msg.plaintext)
+        .map_err(|_| "decrypted message is not valid UTF-8".to_string())?
+        .to_string();
+    Ok(DecryptResultDto {
+        pairing_id: msg.pairing_id.to_string(),
+        seq: msg.seq,
+        timestamp_ms: msg.timestamp_ms,
+        plaintext,
+    })
+}
+
+#[tauri::command]
+fn usb_free_space(path: String) -> Result<u64, String> {
+    available_space(&PathBuf::from(path)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn oauth_status(state: State<'_, AppState>) -> ConnectionStatus {
+    state.transport.status()
+}
+
+#[tauri::command]
+async fn oauth_connect(state: State<'_, AppState>) -> Result<(), String> {
+    state.transport.connect().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn oauth_disconnect(state: State<'_, AppState>) -> Result<(), String> {
+    state.transport.disconnect().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn drive_create_folder(
+    state: State<'_, AppState>,
+    pairing_id: String,
+    peer_email: String,
 ) -> Result<String, String> {
-    println!("Received file path: {}", file_path);
-
-    std::thread::spawn(move || {
-        let otp_size: u64 = file_size * 1024 * 1024; // For a 1GB key
-                                                     //let otp_size: u64 = file_size;
-
-        // Open the file for writing
-        let file = match File::create(&file_path) {
-            Ok(file) => file,
-            Err(e) => {
-                eprintln!("Failed to create file: {}", e); // Log the error
-                return; // Exit the closure early
-            }
-        };
-
-        let mut writer = BufWriter::new(file);
-
-        // Create a buffer for the random data
-        let mut buffer = vec![0u8; 10 * 1024 * 1024]; // 1MB buffer
-
-        // Calculate the number of full buffers to write
-        let full_chunks = otp_size / buffer.len() as u64;
-
-        // Write the full chunks
-        for i in 0..full_chunks {
-            // rand::thread_rng().fill_bytes(&mut buffer);
-            OsRng.fill_bytes(&mut buffer);
-
-            if let Err(e) = writer.write_all(&buffer) {
-                eprintln!("Failed to write to file: {}", e);
-                return;
-            }
-
-            // Emit progress event
-            if i % 2 == 0 {
-                let progress = ((i as f64 + 1.0) / full_chunks as f64) * 100.0;
-                print!("\rProgress: {}%", progress.round());
-                std::io::stdout().flush().unwrap();
-                // Make sure to handle potential errors from emitting events, for example using `expect` or proper error handling
-                window
-                    .emit("otp-key-generation-progress", progress)
-                    .expect("Failed to emit progress");
-            }
-        }
-
-        // Write any remaining bytes that don't fit in a full buffer
-        let remaining_bytes = (otp_size % buffer.len() as u64) as usize;
-        if remaining_bytes > 0 {
-            buffer.resize(remaining_bytes, 0);
-            // rand::thread_rng().fill_bytes(&mut buffer);
-            OsRng.fill_bytes(&mut buffer);
-            // match writer.write_all(&buffer) {
-            //     Ok(_) => {} // If successful, do nothing
-            //     Err(e) => {
-            //         eprintln!("Failed to write to file: {}", e); // Log the error
-            //         return; // Exit the closure early
-            //     }
-            // };
-            if let Err(e) = writer.write_all(&buffer) {
-                eprintln!("Failed to write to file: {}", e);
-                return;
-            }
-        }
-
-        match writer.flush() {
-            Ok(_) => {} // If successful, do nothing
-            Err(e) => {
-                eprintln!("Failed to flush writer: {}", e); // Log the error
-                return; // Exit the closure early
-            }
-        };
-
-        // Append metadata after successfully writing the key
-        if let Err(e) = append_metadata_to_key(&file_path, &None, otp_size, &None) {
-            eprintln!("Failed to append metadata: {}", e);
-            return;
-        }
-
-        // Once done, you can emit an event to the frontend indicating completion
-        window
-            .emit("otp-key-generation-complete", {})
-            .expect("Failed to emit event");
-    });
-
-    Ok("Key generation started".into())
-}
-
-#[tauri::command]
-fn encrypt(plaintext_msg: String, file_path: String) -> Result<String, String> {
-    println!("\n--encrypt-- \n");
-    let file = match File::open(&file_path) {
-        Ok(file) => file,
-        Err(e) => return Err(e.to_string()),
-    };
-
-    let mut reader = BufReader::new(file);
-    let mut buffer = Vec::new();
-    let mut encrypted_msg = Vec::new();
-    let mut plaintext_bytes = plaintext_msg.into_bytes().into_iter();
-
-    // Read the file
-    reader.read_to_end(&mut buffer).map_err(|e| e.to_string())?;
-
-    let separator = "\n---METADATA---\n".as_bytes(); // Convert separator to byte slice
-                                                     // Search for the separator in the buffer
-    let separator_index = buffer
-        .windows(separator.len())
-        .position(|window| window == separator);
-
-    // println!("buffer: {}", buffer[0]);
-
-    // Step 1:  Get key buffer
-    let key_buffer = match separator_index {
-        Some(index) => &buffer[0..index],
-        None => &buffer,
-    };
-
-    // println!("key_buffer: {}", key_buffer[0]);
-
-    // Step 2:  Get metadata_str
-    let metadata_bytes = match separator_index {
-        Some(index) => &buffer[index + separator.len()..],
-        None => &[], // Return an empty byte slice if the separator is not found
-    };
-
-    // Convert the byte slice to a string, using lossy conversion for potentially invalid UTF-8 data
-    let metadata_cow = String::from_utf8_lossy(metadata_bytes);
-    let metadata_str: &str = &metadata_cow;
-
-    // println!("Metadata Content: {:?}", metadata_str);
-    // println!("buffer_length {:?}", buffer.len());
-
-    // Step 3:  Parse Metadata
-
-    let mut generation_date: Option<String> = None;
-    let mut filename: Option<String> = None;
-
-    match serde_json::from_str::<Value>(metadata_str) {
-        Ok(metadata) => {
-            // Extract generationDate
-            if let Some(date_str) = metadata["generationDate"].as_str() {
-                generation_date = Some(date_str.to_string());
-            } else {
-                println!("Warning: 'generationDate' not found in metadata.");
-            }
-
-            // Extract filename
-            if let Some(file_str) = metadata["filename"].as_str() {
-                filename = Some(file_str.to_string());
-            } else {
-                println!("Warning: 'filename' not found in metadata.");
-            }
-        }
-        Err(e) => println!("Error parsing metadata: {}", e),
-    }
-
-    // Step 4:  Encrypt the data up to the metadata
-    for (i, &byte) in key_buffer.iter().enumerate() {
-        if let Some(msg_byte) = plaintext_bytes.next() {
-            // Debugging print statements
-            // println!("Iteration: {}", i);
-            // println!("Key byte ({}): {:?} [char: '{}']", i, byte, byte as char);
-            // println!(
-            //     "Message byte ({}): {:?} [char: '{}']",
-            //     i, msg_byte, msg_byte as char
-            // );
-            // println!(
-            //     "Resulting byte: {:?} [char: '{}']",
-            //     msg_byte ^ byte,
-            //     (msg_byte ^ byte) as char
-            // );
-
-            encrypted_msg.push(msg_byte ^ byte);
-        } else {
-            // Update the file by removing the used part of the key and updating the metadata
-            // Skip the current byte as it's already used
-            let new_key_content = match separator_index {
-                Some(index) => &buffer[0..index], // does not use up the key
-                // Some(index) => &buffer[i + 1..index], // Use the found separator index
-                None => &buffer[i + 1..], // Default to the rest of the buffer if separator is not found
-            };
-
-            // Open the file in write mode to update it
-            let mut file = OpenOptions::new()
-                .write(true)
-                .truncate(true)
-                .open(&file_path)
-                .map_err(|e| e.to_string())?;
-
-            // println!("\nnew_key_content: {}", encode(new_key_content));
-
-            // Write the remaining key content back to the file
-            file.write_all(new_key_content).map_err(|e| e.to_string())?;
-
-            file.flush().map_err(|e| e.to_string())?;
-
-            // Append updated metadata
-            append_metadata_to_key(
-                &file_path,
-                &filename,
-                new_key_content.len() as u64,
-                &generation_date,
-            )
-            .map_err(|e| e.to_string())?;
-
-            append_metadata_to_msg(
-                &mut encrypted_msg,
-                &file_path,
-                &filename,
-                new_key_content.len(),
-                generation_date,
-            );
-
-            break; // If the plaintext message is shorter than the key, break out of the loop
-        }
-    }
-
-    // println!("encrypted_msg : {:?}", encrypted_msg);
-
-    // Convert the encrypted message to a Base64 String and return it
-    Ok(encode(&encrypted_msg))
-}
-
-#[tauri::command]
-fn decrypt(encrypted_msg: String, file_path: String) -> Result<String, String> {
-    println!("\n--decrypt--\n");
-
-    // Step 1: Base64 Decode
-    let encrypted_msg_bytes = decode(&encrypted_msg).map_err(|e| e.to_string())?;
-
-    // println!("encrypted_msg_bytes : {:?}", encrypted_msg_bytes);
-
-    // Step 2: Find the Separator and Split
-    let separator = b"-->>"; // Byte string for the separator
-    let separator_len = separator.len();
-    let position = encrypted_msg_bytes // Find the position of the separator
-        .windows(separator_len)
-        .position(|window| window == separator);
-
-    // println!("position : {:?}", position);
-
-    let (payload, metadata_with_separator) = match position {
-        // Split the byte slice at the position of the separator
-        Some(pos) => encrypted_msg_bytes.split_at(pos),
-        None => return Err("Separator not found".into()),
-    };
-
-    // Adjust for the separator to get only the metadata part
-    let metadata_bytes = if metadata_with_separator.len() > separator_len {
-        &metadata_with_separator[separator_len..]
-    } else {
-        return Err("No metadata after separator".into());
-    };
-
-    // println!("payload : {:?}", String::from_utf8_lossy(&payload));
-    //println!(
-    //     "metadata_bytes: {:?}",
-    //     String::from_utf8_lossy(&metadata_bytes)
-    // );
-
-    // Step 3: Extract and Parse Metadata
-    // Parse metadata assuming it's JSON
-    let metadata_str = std::str::from_utf8(metadata_bytes)
-        .map_err(|e| e.to_string())?
-        .trim_start_matches(char::from(separator[0]));
-    let metadata: Value = serde_json::from_str(metadata_str).map_err(|e| e.to_string())?;
-
-    if let Some(generation_date) = metadata["generationDate"].as_str() {
-        println!("Generation Date: {}", generation_date);
-    } else {
-        return Err("Missing generationDate in metadata".into());
-    }
-
-    // Step 4: Process the Payload
-
-    // Open the key file and read its content
-    let mut key_file_content = Vec::new();
-
-    File::open(&file_path)
-        .map_err(|e| e.to_string())?
-        .read_to_end(&mut key_file_content)
+    let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
+    let drive = DriveClient::new(state.transport.clone());
+    let folder_name = format!("{}-{}", DRIVE_FOLDER_NAME_PREFIX, Uuid::new_v4());
+    let folder_id = drive
+        .create_folder(&folder_name)
+        .await
         .map_err(|e| e.to_string())?;
-
-    // Decrypt the message using the key bytes
-    let mut decrypted_msg = Vec::new();
-
-    for (i, &enc_byte) in payload.iter().enumerate() {
-        let key_byte = key_file_content
-            .get(i % key_file_content.len())
-            .ok_or("Key byte index out of range")?;
-        decrypted_msg.push(enc_byte ^ key_byte);
-
-        // println!("enc_byte: {:?}", enc_byte);
-        // println!("key_byte: {:?}", key_byte);
+    if !peer_email.trim().is_empty() {
+        if let Err(e) = drive
+            .share_folder(&folder_id, peer_email.trim(), "writer")
+            .await
+        {
+            let _ = drive.delete(&folder_id).await;
+            return Err(format!("created folder but share failed: {}", e));
+        }
     }
-
-    println!(
-        "decrypted_msg {:?}",
-        String::from_utf8_lossy(&decrypted_msg)
-    );
-
-    // Convert the decrypted message bytes to a String and return it
-    String::from_utf8(decrypted_msg).map_err(|e| e.to_string())
+    state
+        .vault
+        .set_drive_folder_id(&id, folder_id.clone())
+        .map_err(|e| e.to_string())?;
+    Ok(folder_id)
 }
 
-fn append_metadata_to_key(
-    file_path: &str,
-    file_name: &Option<String>,
-    size_in_bytes: u64,
-    generation_date: &Option<String>,
+#[tauri::command]
+async fn drive_bind_folder(
+    state: State<'_, AppState>,
+    pairing_id: String,
+    folder_id: String,
 ) -> Result<(), String> {
-    // Extract generation_date
-    let date_str = match generation_date {
-        Some(date) => date.clone(),
-        None => chrono::Utc::now().to_rfc3339(),
-    };
-    let file_name = match file_name {
-        Some(name) => name,
-        None => Path::new(file_path)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("unknown"),
-    };
-
-    // Metadata structure
-    let metadata = serde_json::json!({
-        "filename": file_name,
-        "sizeInBytes": size_in_bytes,
-        "generationDate": date_str,
-        "updateDate": chrono::Utc::now().to_rfc3339(),
-    });
-
-    // Convert metadata to a String
-    let metadata_str = metadata.to_string();
-
-    // Unique separator
-    let separator = "\n---METADATA---\n";
-
-    // println!("\nmetadata: {}", metadata_str);
-
-    // Open the file in append mode to update it
-    let mut file = OpenOptions::new()
-        .append(true) // Use append instead of truncate
-        .open(file_path)
+    let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
+    let trimmed = folder_id.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("folder id is empty".into());
+    }
+    let drive = DriveClient::new(state.transport.clone());
+    drive
+        .get_folder(&trimmed)
+        .await
+        .map_err(|e| format!("could not access folder via drive.file scope: {}", e))?;
+    state
+        .vault
+        .set_drive_folder_id(&id, trimmed)
         .map_err(|e| e.to_string())?;
-
-    file.write_all(separator.as_bytes())
-        .map_err(|e| e.to_string())?;
-
-    file.write_all(metadata_str.as_bytes())
-        .map_err(|e| e.to_string())?;
-
-    file.flush().map_err(|e| e.to_string())?;
-
     Ok(())
 }
 
-fn append_metadata_to_msg(
-    encrypted_msg: &mut Vec<u8>,
-    file_path: &str,
-    file_name: &Option<String>,
-    new_key_content_len: usize,
-    generation_date: Option<String>,
-) {
-    let file_name = match file_name {
-        Some(name) => name,
-        None => Path::new(file_path)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("unknown"),
-    };
+#[tauri::command]
+fn drive_unbind_folder(
+    state: State<'_, AppState>,
+    pairing_id: String,
+) -> Result<(), String> {
+    let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
+    state
+        .vault
+        .clear_drive_folder_id(&id)
+        .map_err(|e| e.to_string())
+}
 
-    let prepend_metadata = json!({
-        "filename": file_name,
-        "sizeInBytes": new_key_content_len as u64,
-        "generationDate": generation_date.unwrap_or_else(|| Utc::now().to_rfc3339()),
-    });
+#[cfg(unix)]
+fn available_space(path: &Path) -> std::io::Result<u64> {
+    use std::os::unix::ffi::OsStrExt;
+    let cstr = std::ffi::CString::new(path.as_os_str().as_bytes())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    let mut buf: libc::statvfs = unsafe { std::mem::zeroed() };
+    let ret = unsafe { libc::statvfs(cstr.as_ptr(), &mut buf) };
+    if ret != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok((buf.f_bavail as u64).saturating_mul(buf.f_frsize as u64))
+}
 
-    let prepend_metadata_bytes = prepend_metadata.to_string().into_bytes();
+#[cfg(not(unix))]
+fn available_space(_path: &Path) -> std::io::Result<u64> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "available-space detection is not implemented on this platform; enter pad size manually",
+    ))
+}
 
-    encrypted_msg.extend_from_slice(b"-->>");
-    encrypted_msg.extend_from_slice(&prepend_metadata_bytes);
+fn main() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let base = app
+                .path()
+                .app_data_dir()
+                .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
+            let vault = Arc::new(
+                Vault::open(base).map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?,
+            );
+            let transport = Arc::new(Transport::new());
+
+            let v = Arc::clone(&vault);
+            let t = Arc::clone(&transport);
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                transport::poller::run(v, t, handle, POLL_INTERVAL).await;
+            });
+
+            app.manage(AppState { vault, transport });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            list_pairings,
+            create_pairing,
+            import_pairing,
+            send_message,
+            decrypt_message,
+            usb_free_space,
+            oauth_status,
+            oauth_connect,
+            oauth_disconnect,
+            drive_create_folder,
+            drive_bind_folder,
+            drive_unbind_folder,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }

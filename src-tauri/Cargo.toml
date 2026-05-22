@@ -1,24 +1,36 @@
 [package]
 name = "otp_messanger"
 version = "0.0.0"
-description = "A OTP App"
+description = "One-time Pad Messenger"
 authors = ["AguilarTech"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [build-dependencies]
-tauri-build = { version = "1", features = [] }
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "1", features = [ "dialog-open", "dialog-save", "shell-open"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1.0"
-rand = "0.8.5" 
-base64 = "0.13.0" 
-chrono = "0.4"
+serde_json = "1"
+toml = "0.8"
+poly1305 = "0.8"
+zeroize = { version = "1", features = ["derive"] }
+subtle = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+rand = "0.8"
+thiserror = "1"
+base64 = "0.22"
+libc = "0.2"
+oauth2 = "5"
+keyring = { version = "3", features = ["apple-native", "linux-native", "windows-native"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["sync", "time", "net", "io-util", "macros", "rt"] }
+webbrowser = "1"
+url = "2"
 
+[dev-dependencies]
+tempfile = "3"
 
 [features]
-# This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]

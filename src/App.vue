@@ -1,87 +1,77 @@
 <script setup>
-	// This starter template is using Vue 3 <script setup> SFCs
-	// Check out https://vuejs.org/api/sfc-script-setup.html#script-setup
-	import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 
-	import FileLoader from './components/FileLoader.vue'
-	import DecodeMessage from './components/DecodeMessage.vue'
-	import EncryptMessage from './components/EncryptMessage.vue'
-	import GenerateKey from './components/GenerateKey.vue'
+import PairingList from './views/PairingList.vue'
+import CreatePairing from './views/CreatePairing.vue'
+import ImportPairing from './views/ImportPairing.vue'
+import Conversation from './views/Conversation.vue'
+import Settings from './views/Settings.vue'
 
-	const keyPath = ref(null)
+const view = ref({ name: 'list' })
+const pairings = ref([])
+const oauthStatus = ref({ configured: false, connected: false })
+const loadError = ref('')
 
-	const onFileSelected = (filePath) => {
-		// Handle the loaded file here
-		console.log('File Path in App.vue:', filePath)
-		keyPath.value = filePath
+async function refresh() {
+	try {
+		pairings.value = await invoke('list_pairings')
+		oauthStatus.value = await invoke('oauth_status')
+		loadError.value = ''
+	} catch (e) {
+		loadError.value = String(e)
 	}
+}
+
+onMounted(refresh)
+
+function open(name, ctx = {}) {
+	view.value = { name, ...ctx }
+}
+
+async function backToList() {
+	await refresh()
+	view.value = { name: 'list' }
+}
 </script>
 
 <template>
-	<div class="container">
-		<div class="row">
-			<a href="https://AguilarTech.com.au" target="_blank">
-				<img
-					src="/logo.png"
-					class="logo AguilarTech"
-					alt="AguilarTech"
-				/>
-			</a>
-		</div>
-
-		<h1>One-time Pad Encryption Messanger</h1>
-
-		<p>
-			In cryptography, the
-			<a href="https://en.wikipedia.org/wiki/One-time_pad"
-				>one-time pad (OTP) </a
-			>is an encryption technique that cannot be cracked, but requires the
-			use of a single-use pre-shared key that is larger than or equal to
-			the size of the message being sent. In this technique, a plaintext
-			is paired with a random secret key (also referred to as a one-time
-			pad). Then, each bit or character of the plaintext is encrypted by
-			combining it with the corresponding bit or character from the pad
-			using modular addition.
-		</p>
-
-		<div class="line-separator"></div>
-
-		<h2>Load One-time pad key</h2>
-
-		<FileLoader @file-selected="onFileSelected" />
-
-		<h2>Decode Message</h2>
-
-		<DecodeMessage :keyPath="keyPath" />
-
-		<h2>Encode Message</h2>
-
-		<EncryptMessage :keyPath="keyPath" />
-
-		<div class="line-separator"></div>
-
-		<h1>Generate new key</h1>
-
-		<h2>Create new One-time pad key</h2>
-
-		<GenerateKey />
+	<div class="app">
+		<PairingList
+			v-if="view.name === 'list'"
+			:pairings="pairings"
+			:oauth-status="oauthStatus"
+			:load-error="loadError"
+			@create="open('create')"
+			@import="open('import')"
+			@settings="open('settings')"
+			@open="(p) => open('convo', { pairing: p })"
+			@refresh="refresh"
+		/>
+		<CreatePairing
+			v-else-if="view.name === 'create'"
+			@done="backToList"
+			@cancel="backToList"
+		/>
+		<ImportPairing
+			v-else-if="view.name === 'import'"
+			@done="backToList"
+			@cancel="backToList"
+		/>
+		<Conversation
+			v-else-if="view.name === 'convo'"
+			:pairing="view.pairing"
+			@back="backToList"
+			@pairing-changed="refresh"
+		/>
+		<Settings v-else-if="view.name === 'settings'" @back="backToList" />
 	</div>
 </template>
 
 <style scoped>
-	.logo.AguilarTech:hover {
-		filter: drop-shadow(0 0 2em #747bff);
-	}
-	.logo.AguilarTech {
-		max-height: 70px;
-	}
-
-	.logo.vue:hover {
-		filter: drop-shadow(0 0 2em #249b73);
-	}
-
-	.line-separator {
-		border-bottom: 1px solid #ccc; /* Adjust color and thickness as needed */
-		margin: 20px 0; /* Adjust spacing as needed */
+	.app {
+		max-width: 720px;
+		margin: 0 auto;
+		padding: 24px;
 	}
 </style>
