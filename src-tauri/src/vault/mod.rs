@@ -43,6 +43,7 @@ pub struct PairingInfo {
     pub in_remaining: u64,
     pub seq_out: u64,
     pub last_seq_in: u64,
+    pub drive_folder_id: String,
 }
 
 impl From<&Pairing> for PairingInfo {
@@ -57,6 +58,7 @@ impl From<&Pairing> for PairingInfo {
             in_remaining: p.in_total.saturating_sub(p.in_cursor),
             seq_out: p.seq_out,
             last_seq_in: p.last_seq_in,
+            drive_folder_id: p.drive_folder_id.clone(),
         }
     }
 }
@@ -104,6 +106,24 @@ impl Vault {
     pub fn list_pairings(&self) -> Result<Vec<PairingInfo>> {
         let st = self.state.lock().unwrap();
         Ok(st.pairings.iter().map(PairingInfo::from).collect())
+    }
+
+    pub fn set_drive_folder_id(&self, pairing_id: &Uuid, folder_id: String) -> Result<()> {
+        let mut st = self.state.lock().unwrap();
+        {
+            let p = st.find_mut(pairing_id)?;
+            p.drive_folder_id = folder_id;
+        }
+        self.persist(&st)
+    }
+
+    pub fn clear_drive_folder_id(&self, pairing_id: &Uuid) -> Result<()> {
+        let mut st = self.state.lock().unwrap();
+        {
+            let p = st.find_mut(pairing_id)?;
+            p.drive_folder_id = String::new();
+        }
+        self.persist(&st)
     }
 
     /// Generate two fresh random pads of the given size and register the

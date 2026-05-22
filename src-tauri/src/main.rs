@@ -1,18 +1,26 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod transport;
 mod vault;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
 
 use base64::Engine;
 use serde::Serialize;
 use tauri::{Manager, State};
 use uuid::Uuid;
 
+use transport::{ConnectionStatus, DriveClient, Transport};
 use vault::{PairingInfo, Vault};
 
+const POLL_INTERVAL: Duration = Duration::from_secs(30);
+const DRIVE_FOLDER_NAME_PREFIX: &str = "otp-msgr";
+
 struct AppState {
-    vault: Vault,
+    vault: Arc<Vault>,
+    transport: Arc<Transport>,
 }
 
 #[derive(Serialize)]
@@ -21,6 +29,15 @@ struct DecryptResultDto {
     seq: u64,
     timestamp_ms: u64,
     plaintext: String,
+}
+
+#[derive(Serialize)]
+struct SendResultDto {
+    /// Always present — opaque base64 frame.
+    frame: String,
+    /// When Drive is connected and the pairing has a folder bound, the
+    /// frame is uploaded automatically and this is the Drive file id.
+    uploaded_file_id: Option<String>,
 }
 
 #[tauri::command]
@@ -55,17 +72,48 @@ fn import_pairing(
 }
 
 #[tauri::command]
-fn encrypt_message(
+async fn send_message(
     state: State<'_, AppState>,
     pairing_id: String,
     plaintext: String,
-) -> Result<String, String> {
+) -> Result<SendResultDto, String> {
     let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
-    let frame = state
+    let frame_bytes = state
         .vault
         .encrypt(&id, plaintext.as_bytes())
         .map_err(|e| e.to_string())?;
-    Ok(base64::engine::general_purpose::STANDARD.encode(&frame))
+    let frame_b64 = base64::engine::general_purpose::STANDARD.encode(&frame_bytes);
+
+    // Look up folder binding (snapshot).
+    let folder_id = state
+        .vault
+        .list_pairings()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|p| p.id == id)
+        .map(|p| p.drive_folder_id)
+        .unwrap_or_default();
+
+    let mut uploaded_file_id = None;
+    if !folder_id.is_empty() && state.transport.status().connected {
+        let drive = DriveClient::new(state.transport.clone());
+        let blob_name = format!("{}.bin", Uuid::new_v4());
+        match drive.upload(&folder_id, &blob_name, &frame_bytes).await {
+            Ok(file_id) => uploaded_file_id = Some(file_id),
+            Err(e) => {
+                return Err(format!(
+                    "frame encrypted and pad consumed, but Drive upload failed: {}. \
+                     Copy the frame manually as a fallback.",
+                    e
+                ));
+            }
+        }
+    }
+
+    Ok(SendResultDto {
+        frame: frame_b64,
+        uploaded_file_id,
+    })
 }
 
 #[tauri::command]
@@ -91,6 +139,85 @@ fn decrypt_message(
 #[tauri::command]
 fn usb_free_space(path: String) -> Result<u64, String> {
     available_space(&PathBuf::from(path)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn oauth_status(state: State<'_, AppState>) -> ConnectionStatus {
+    state.transport.status()
+}
+
+#[tauri::command]
+async fn oauth_connect(state: State<'_, AppState>) -> Result<(), String> {
+    state.transport.connect().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn oauth_disconnect(state: State<'_, AppState>) -> Result<(), String> {
+    state.transport.disconnect().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn drive_create_folder(
+    state: State<'_, AppState>,
+    pairing_id: String,
+    peer_email: String,
+) -> Result<String, String> {
+    let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
+    let drive = DriveClient::new(state.transport.clone());
+    let folder_name = format!("{}-{}", DRIVE_FOLDER_NAME_PREFIX, Uuid::new_v4());
+    let folder_id = drive
+        .create_folder(&folder_name)
+        .await
+        .map_err(|e| e.to_string())?;
+    if !peer_email.trim().is_empty() {
+        if let Err(e) = drive
+            .share_folder(&folder_id, peer_email.trim(), "writer")
+            .await
+        {
+            let _ = drive.delete(&folder_id).await;
+            return Err(format!("created folder but share failed: {}", e));
+        }
+    }
+    state
+        .vault
+        .set_drive_folder_id(&id, folder_id.clone())
+        .map_err(|e| e.to_string())?;
+    Ok(folder_id)
+}
+
+#[tauri::command]
+async fn drive_bind_folder(
+    state: State<'_, AppState>,
+    pairing_id: String,
+    folder_id: String,
+) -> Result<(), String> {
+    let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
+    let trimmed = folder_id.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("folder id is empty".into());
+    }
+    let drive = DriveClient::new(state.transport.clone());
+    drive
+        .get_folder(&trimmed)
+        .await
+        .map_err(|e| format!("could not access folder via drive.file scope: {}", e))?;
+    state
+        .vault
+        .set_drive_folder_id(&id, trimmed)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn drive_unbind_folder(
+    state: State<'_, AppState>,
+    pairing_id: String,
+) -> Result<(), String> {
+    let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
+    state
+        .vault
+        .clear_drive_folder_id(&id)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(unix)]
@@ -122,18 +249,34 @@ fn main() {
                 .path()
                 .app_data_dir()
                 .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
-            let vault =
-                Vault::open(base).map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
-            app.manage(AppState { vault });
+            let vault = Arc::new(
+                Vault::open(base).map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?,
+            );
+            let transport = Arc::new(Transport::new());
+
+            let v = Arc::clone(&vault);
+            let t = Arc::clone(&transport);
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                transport::poller::run(v, t, handle, POLL_INTERVAL).await;
+            });
+
+            app.manage(AppState { vault, transport });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             list_pairings,
             create_pairing,
             import_pairing,
-            encrypt_message,
+            send_message,
             decrypt_message,
             usb_free_space,
+            oauth_status,
+            oauth_connect,
+            oauth_disconnect,
+            drive_create_folder,
+            drive_bind_folder,
+            drive_unbind_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
