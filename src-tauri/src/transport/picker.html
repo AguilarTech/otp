@@ -2,99 +2,229 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
 <title>OTP Messenger — Google Drive Picker</title>
 <style>
 	body {
-		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-		background: #1e1e1e;
-		color: #eee;
-		padding: 40px;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+			Roboto, sans-serif;
+		background: #0b1320;
+		color: #ecedf2;
+		padding: 32px 24px;
 		margin: 0;
 	}
 	.card {
-		max-width: 600px;
-		background: #2a2a2a;
-		padding: 20px 24px;
-		border-radius: 8px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		max-width: 640px;
+		margin: 0 auto;
+		background: #141e30;
+		padding: 24px 28px;
+		border-radius: 14px;
+		box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+		border: 1px solid rgba(236, 237, 242, 0.1);
 	}
 	h2 {
-		margin: 0 0 12px 0;
+		margin: 0 0 6px 0;
+		font-size: 22px;
 	}
-	p {
-		color: #ccc;
+	.subtitle {
+		margin: 0 0 18px 0;
+		color: #b6bdc9;
+		font-size: 14px;
 		line-height: 1.5;
+	}
+	.steps {
+		margin: 0 0 18px 0;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.step {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 8px 12px;
+		background: #1c2940;
+		border-radius: 8px;
+		font-size: 13.5px;
+		color: #b6bdc9;
+		border: 1px solid rgba(236, 237, 242, 0.06);
+	}
+	.step.ok {
+		color: #34d399;
+		border-color: rgba(52, 211, 153, 0.3);
+	}
+	.step.fail {
+		color: #f47b7b;
+		border-color: rgba(244, 123, 123, 0.3);
+	}
+	.step .icon {
+		width: 16px;
+		flex-shrink: 0;
+		font-weight: 700;
+		text-align: center;
 	}
 	.actions {
 		display: flex;
 		gap: 8px;
-		margin-top: 16px;
+		margin: 20px 0 16px;
+		flex-wrap: wrap;
 	}
 	button {
-		padding: 8px 16px;
-		font-size: 1em;
-		border: 1px solid #444;
-		background: #1a1a1a;
-		color: #eee;
-		border-radius: 6px;
+		padding: 10px 18px;
+		font-size: 14px;
+		font-weight: 600;
+		border: 1px solid rgba(236, 237, 242, 0.12);
+		background: #1c2940;
+		color: #ecedf2;
+		border-radius: 999px;
 		cursor: pointer;
+		font-family: inherit;
 	}
 	button:hover:not(:disabled) {
-		border-color: #4caf50;
+		border-color: #4d8af0;
 	}
 	button:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
+	button.primary {
+		background: #4d8af0;
+		color: #061224;
+		border-color: #4d8af0;
+	}
 	.error {
-		color: #ff7070;
-		background: #2a1a1a;
-		padding: 8px 12px;
-		border-radius: 4px;
-		margin-top: 12px;
 		display: none;
+		color: #f47b7b;
+		background: rgba(244, 123, 123, 0.08);
+		border: 1px solid rgba(244, 123, 123, 0.3);
+		padding: 10px 14px;
+		border-radius: 8px;
+		margin-bottom: 14px;
+		font-size: 13px;
+		line-height: 1.5;
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
+	.alt {
+		margin-top: 20px;
+		padding: 14px 16px;
+		background: rgba(77, 138, 240, 0.08);
+		border: 1px solid rgba(77, 138, 240, 0.25);
+		border-radius: 8px;
+		font-size: 13px;
+		line-height: 1.55;
+		color: #b6bdc9;
+	}
+	.alt strong {
+		color: #ecedf2;
+	}
+	.alt code {
+		background: #0b1320;
+		padding: 1px 6px;
+		border-radius: 4px;
+		font-size: 12px;
+	}
+	details {
+		margin-top: 14px;
+		font-size: 12px;
+		color: #7c8492;
+	}
+	details summary {
+		cursor: pointer;
+		padding: 4px 0;
+	}
+	.diag {
+		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-size: 11px;
+		background: #0b1320;
+		padding: 10px 12px;
+		border-radius: 6px;
+		margin-top: 6px;
+		white-space: pre-wrap;
+		word-break: break-all;
+		color: #b6bdc9;
 	}
 </style>
 </head>
 <body>
 <div class="card">
 	<h2>OTP Messenger</h2>
-	<p id="status">Loading Google Drive Picker…</p>
+	<p class="subtitle">
+		Picking the Drive folder your friend shared with you. Once you
+		select it, this tab will report back to the app and you can close it.
+	</p>
+
+	<div class="steps">
+		<div class="step" id="step-params"><span class="icon">⏳</span> Reading session params…</div>
+		<div class="step" id="step-gapi"><span class="icon">⏳</span> Loading Google APIs…</div>
+		<div class="step" id="step-picker"><span class="icon">⏳</span> Setting up the picker…</div>
+	</div>
+
+	<div id="error" class="error"></div>
+
 	<div class="actions">
-		<button id="open" disabled>Choose folder</button>
+		<button id="open" class="primary" disabled>Open folder picker</button>
 		<button id="cancel">Cancel</button>
 	</div>
-	<div id="error" class="error"></div>
+
+	<details>
+		<summary>Diagnostics</summary>
+		<div id="diag" class="diag">collecting…</div>
+	</details>
+
+	<div class="alt">
+		<strong>If the picker won't load:</strong> open the Drive
+		notification email and click the link to the shared folder. In
+		Drive's address bar you'll see a URL like
+		<code>https://drive.google.com/drive/folders/&lt;id&gt;</code>. Copy
+		that URL, return to the app, and paste it into the
+		<strong>paste a folder link directly</strong> box on the friend's
+		conversation page.
+	</div>
 </div>
-<script src="https://apis.google.com/js/api.js"></script>
+
+<script src="https://apis.google.com/js/api.js" onerror="window.__gapiLoadFailed=true"></script>
 <script>
 (function () {
-	var params = new URLSearchParams(window.location.hash.slice(1));
-	var accessToken = params.get('access_token');
-	var apiKey = params.get('api_key');
-	var appId = params.get('app_id') || '';
-
-	var statusEl = document.getElementById('status');
+	var stepParams = document.getElementById('step-params');
+	var stepGapi = document.getElementById('step-gapi');
+	var stepPicker = document.getElementById('step-picker');
 	var openBtn = document.getElementById('open');
 	var cancelBtn = document.getElementById('cancel');
 	var errorEl = document.getElementById('error');
+	var diagEl = document.getElementById('diag');
+
+	function markStep(el, state, text) {
+		el.classList.remove('ok', 'fail');
+		if (state) el.classList.add(state);
+		el.querySelector('.icon').textContent =
+			state === 'ok' ? '✓' : state === 'fail' ? '✕' : '⏳';
+		if (text) {
+			el.lastChild.textContent = ' ' + text;
+		}
+	}
 
 	function showError(msg) {
-		errorEl.textContent = msg;
+		console.error('[picker]', msg);
+		errorEl.textContent = String(msg);
 		errorEl.style.display = 'block';
 	}
 
 	function postResult(folderId) {
-		fetch('/result?folder_id=' + encodeURIComponent(folderId)).finally(function () {
-			statusEl.textContent = 'Folder bound. You can close this tab and return to the app.';
-			openBtn.disabled = true;
-			cancelBtn.disabled = true;
-		});
+		console.log('[picker] result', folderId);
+		fetch('/result?folder_id=' + encodeURIComponent(folderId)).finally(
+			function () {
+				markStep(stepPicker, 'ok', 'Folder selected. You can close this tab.');
+				openBtn.disabled = true;
+				cancelBtn.disabled = true;
+			},
+		)
 	}
 
 	function postCancel() {
+		console.log('[picker] cancel');
 		fetch('/cancel').finally(function () {
-			statusEl.textContent = 'Cancelled. You can close this tab.';
+			markStep(stepPicker, 'fail', 'Cancelled. You can close this tab.');
 			openBtn.disabled = true;
 			cancelBtn.disabled = true;
 		});
@@ -102,64 +232,133 @@
 
 	cancelBtn.addEventListener('click', postCancel);
 
+	// Step 1: parse params from the URL fragment.
+	var params = new URLSearchParams(window.location.hash.slice(1));
+	var accessToken = params.get('access_token');
+	var apiKey = params.get('api_key');
+	var appId = params.get('app_id') || '';
+
+	diagEl.textContent =
+		'origin       ' + window.location.origin + '\n' +
+		'access_token ' + (accessToken ? '(present, ' + accessToken.length + ' chars)' : '(missing)') + '\n' +
+		'api_key      ' + (apiKey ? apiKey.slice(0, 6) + '… (' + apiKey.length + ' chars)' : '(missing)') + '\n' +
+		'app_id       ' + (appId || '(missing)') + '\n' +
+		'user_agent   ' + navigator.userAgent;
+
 	if (!accessToken || !apiKey) {
-		showError('Missing access token or API key. Retry from the app.');
+		markStep(stepParams, 'fail', 'Missing access_token or api_key in URL.');
+		showError('The picker URL is missing required parameters. Try again from the app.');
 		return;
 	}
+	markStep(stepParams, 'ok', 'Got access token and API key.');
 
-	if (typeof gapi === 'undefined') {
-		showError('Could not load Google APIs. Check your network and retry.');
-		return;
+	// Step 2: wait for the Google APIs script (api.js). The <script> tag
+	// loads it, but if it failed (network, DNS, blocked) gapi stays undefined.
+	function waitForGapi(retries) {
+		if (window.__gapiLoadFailed) {
+			markStep(stepGapi, 'fail', 'Browser failed to load apis.google.com.');
+			showError(
+				'Could not load Google APIs from apis.google.com. ' +
+				'Possible causes: no internet on this machine, a corporate ' +
+				'firewall blocking Google, or a browser extension. Use the ' +
+				'manual paste-link path described below.',
+			);
+			return;
+		}
+		if (typeof gapi !== 'undefined') {
+			markStep(stepGapi, 'ok', 'Google APIs loaded.');
+			loadPicker();
+			return;
+		}
+		if (retries <= 0) {
+			markStep(stepGapi, 'fail', "Timed out waiting for Google APIs.");
+			showError(
+				'Loading apis.google.com took too long. Check your network ' +
+				'connection and try again, or use the manual paste-link ' +
+				'path described below.',
+			);
+			return;
+		}
+		setTimeout(function () { waitForGapi(retries - 1); }, 100);
 	}
 
-	gapi.load('picker', {
-		callback: function () {
-			statusEl.textContent =
-				'Click "Choose folder" and select the mailbox a peer shared with you (look under "Shared with me").';
-			openBtn.disabled = false;
-			openBtn.addEventListener('click', function () {
-				try {
-					var sharedView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-						.setIncludeFolders(true)
-						.setSelectFolderEnabled(true)
-						.setOwnedByMe(false)
-						.setLabel('Shared with me');
-					var myView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-						.setIncludeFolders(true)
-						.setSelectFolderEnabled(true)
-						.setOwnedByMe(true)
-						.setLabel('My Drive');
-					var picker = new google.picker.PickerBuilder()
-						.setOAuthToken(accessToken)
-						.setDeveloperKey(apiKey)
-						.setAppId(appId)
-						.setTitle('Select OTP Messenger mailbox folder')
-						.addView(sharedView)
-						.addView(myView)
-						.setCallback(function (data) {
-							var Action = google.picker.Action;
-							if (data.action === Action.PICKED) {
-								var doc = data.docs && data.docs[0];
-								if (doc && doc.id) {
-									postResult(doc.id);
-								} else {
-									showError('No folder in the picker response.');
-								}
-							} else if (data.action === Action.CANCEL) {
-								postCancel();
-							}
-						})
-						.build();
-					picker.setVisible(true);
-				} catch (err) {
-					showError('Picker failed to open: ' + err);
-				}
-			});
-		},
-		onerror: function (err) {
-			showError('Picker SDK failed to load: ' + (err && err.error ? err.error : err));
-		},
-	});
+	function loadPicker() {
+		gapi.load('picker', {
+			callback: function () {
+				markStep(stepPicker, 'ok', 'Picker ready — click "Open folder picker".');
+				openBtn.disabled = false;
+				openBtn.addEventListener('click', openPicker);
+			},
+			onerror: function (err) {
+				markStep(stepPicker, 'fail', 'Picker SDK refused to load.');
+				showError(
+					'Google Picker SDK failed: ' +
+					(err && err.error ? err.error : JSON.stringify(err)) +
+					'\n\nMost common cause: the Picker API isn\'t enabled in ' +
+					'your Google Cloud project. Open the Google Cloud Console, ' +
+					'go to APIs & Services → Library, search for "Google ' +
+					'Picker API", and click Enable. Then try again.',
+				);
+			},
+			timeout: 15000,
+			ontimeout: function () {
+				markStep(stepPicker, 'fail', 'Loading picker timed out.');
+				showError(
+					'gapi.load("picker") timed out after 15s. This usually ' +
+					'means the browser can\'t reach Google or the Picker API ' +
+					'is not enabled in your Cloud project.',
+				);
+			},
+		});
+	}
+
+	function openPicker() {
+		console.log('[picker] opening');
+		try {
+			var sharedView = new google.picker.DocsView(
+				google.picker.ViewId.FOLDERS,
+			)
+				.setIncludeFolders(true)
+				.setSelectFolderEnabled(true)
+				.setOwnedByMe(false)
+				.setLabel('Shared with me');
+			var myView = new google.picker.DocsView(
+				google.picker.ViewId.FOLDERS,
+			)
+				.setIncludeFolders(true)
+				.setSelectFolderEnabled(true)
+				.setOwnedByMe(true)
+				.setLabel('My Drive');
+			var picker = new google.picker.PickerBuilder()
+				.setOAuthToken(accessToken)
+				.setDeveloperKey(apiKey)
+				.setAppId(appId)
+				.setOrigin(window.location.origin)
+				.setTitle('Pick the OTP Messenger mailbox folder')
+				.addView(sharedView)
+				.addView(myView)
+				.setCallback(function (data) {
+					var Action = google.picker.Action;
+					if (data.action === Action.PICKED) {
+						var doc = data.docs && data.docs[0];
+						if (doc && doc.id) {
+							postResult(doc.id);
+						} else {
+							showError('Picker returned no folder.');
+						}
+					} else if (data.action === Action.CANCEL) {
+						postCancel();
+					}
+				})
+				.build();
+			picker.setVisible(true);
+		} catch (err) {
+			console.error('[picker] open failed', err);
+			showError('Could not open picker: ' + err);
+		}
+	}
+
+	waitForGapi(150); // 150 × 100 ms = 15s total
 })();
 </script>
 </body>
