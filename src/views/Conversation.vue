@@ -81,7 +81,7 @@ async function send() {
 		outUploaded.value = result.uploaded_file_id
 		draft.value = ''
 		if (result.uploaded_file_id) {
-			info.value = `Uploaded to Drive — file id ${result.uploaded_file_id.slice(0, 8)}…`
+			info.value = `Sent through Google Drive (id ${result.uploaded_file_id.slice(0, 8)}…). Your friend's app will pick it up within ~30 seconds.`
 		}
 		await refreshLocal()
 	} catch (e) {
@@ -94,7 +94,7 @@ async function send() {
 async function copyOut() {
 	try {
 		await navigator.clipboard.writeText(outFrame.value)
-		info.value = 'Frame copied to clipboard.'
+		info.value = 'Copied. Paste it into email, Signal, or anywhere else.'
 	} catch (e) {
 		error.value = `Copy failed: ${e}`
 	}
@@ -108,7 +108,7 @@ function clearOut() {
 async function receive() {
 	error.value = ''
 	if (!inFrame.value.trim()) {
-		error.value = 'Paste a frame to decode.'
+		error.value = 'Paste an encrypted message to decode.'
 		return
 	}
 	busy.value = true
@@ -151,8 +151,8 @@ async function createDriveFolder() {
 			peerEmail: peerEmail.value.trim(),
 		})
 		info.value = peerEmail.value.trim()
-			? `Folder created and shared with ${peerEmail.value.trim()} (Drive sent an invite).`
-			: 'Folder created. Bind it on the peer side manually.'
+			? `Drive folder ready and shared with ${peerEmail.value.trim()}. Google has sent them an email invite.`
+			: 'Drive folder ready. Your friend will need to link it on their side too.'
 		peerEmail.value = ''
 		await refreshLocal()
 		emit('pairing-changed')
@@ -167,7 +167,7 @@ async function bindDriveFolder() {
 	error.value = ''
 	info.value = ''
 	if (!folderToBind.value.trim()) {
-		error.value = 'Paste a Drive folder ID or URL.'
+		error.value = 'Paste the Drive folder link or ID first.'
 		return
 	}
 	const folderId = extractFolderId(folderToBind.value.trim())
@@ -178,7 +178,7 @@ async function bindDriveFolder() {
 			folderId,
 		})
 		info.value =
-			'Folder bound. Background polling will pick up new messages every ~30s.'
+			'Linked. New messages will arrive automatically every ~30 seconds.'
 		folderToBind.value = ''
 		await refreshLocal()
 		emit('pairing-changed')
@@ -192,11 +192,11 @@ async function bindDriveFolder() {
 async function pickDriveFolder() {
 	error.value = ''
 	info.value =
-		'A browser tab opened with Google Picker. Pick the folder a peer shared with you and return here.'
+		'Your browser will open with the Google folder picker. Choose the folder your friend shared with you and come back here.'
 	driveBusy.value = true
 	try {
 		await invoke('drive_pick_folder', { pairingId: local.value.id })
-		info.value = 'Folder picked and bound. Background polling is active.'
+		info.value = 'Linked. New messages will arrive automatically every ~30 seconds.'
 		await refreshLocal()
 		emit('pairing-changed')
 	} catch (e) {
@@ -213,7 +213,7 @@ async function unbindDriveFolder() {
 	driveBusy.value = true
 	try {
 		await invoke('drive_unbind_folder', { pairingId: local.value.id })
-		info.value = 'Folder unbound from this pairing.'
+		info.value = 'Unlinked. The app will stop checking Drive for this friend.'
 		await refreshLocal()
 		emit('pairing-changed')
 	} catch (e) {
@@ -238,48 +238,48 @@ function extractFolderId(input) {
 			Back
 		</button>
 
-		<div class="eyebrow">Pairing</div>
+		<div class="eyebrow">Friend</div>
 		<h1 class="h1">{{ local.name }}</h1>
 
 		<div class="card">
 			<div class="card-head">
 				<div>
-					<div class="h2" style="margin-bottom: 4px">Drive mailbox</div>
+					<div class="h2" style="margin-bottom: 4px">Internet delivery</div>
 					<p class="small" style="margin: 0">
-						Each pairing gets its own Drive folder. Both peers upload
-						ciphertext blobs; the poller verifies and pulls them down.
+						Send and receive automatically through a private Google
+						Drive folder you and {{ local.name }} both have access to.
 					</p>
 				</div>
 				<span
 					class="pill"
-					:class="autoUploadActive ? 'pill-success' : driveBound ? 'pill-neutral' : 'pill-neutral'"
+					:class="autoUploadActive ? 'pill-success' : 'pill-neutral'"
 				>
 					<span class="dot" :class="{ pulse: autoUploadActive }"></span>
 					{{
 						autoUploadActive
-							? 'Auto-upload + poll'
+							? 'Live'
 							: driveBound
-								? 'Bound, drive offline'
-								: 'Not bound'
+								? 'Drive offline'
+								: 'Not set up'
 					}}
 				</span>
 			</div>
 
 			<div v-if="!oauthStatus.client_configured" class="banner banner-warn">
-				OAuth client not configured. Settings → see
-				<code>CLOUD_SETUP.md</code>.
+				Google Drive isn't set up in this build. Open
+				<strong>Settings</strong> for details.
 			</div>
 			<div
 				v-else-if="!oauthStatus.connected"
 				class="banner banner-info"
 			>
-				Connect Google Drive in Settings to enable auto-upload and
-				polling.
+				Connect Google Drive in <strong>Settings</strong> to turn on
+				auto-delivery for this friend.
 			</div>
 
 			<div v-if="driveBound" class="bound-row">
 				<div>
-					<div class="small" style="margin-bottom: 4px">Folder</div>
+					<div class="small" style="margin-bottom: 4px">Drive folder</div>
 					<code class="mono">{{ local.drive_folder_id }}</code>
 				</div>
 				<button
@@ -288,17 +288,17 @@ function extractFolderId(input) {
 					@click="unbindDriveFolder"
 					:disabled="driveBusy"
 				>
-					Unbind
+					Unlink
 				</button>
 			</div>
 
 			<div v-else-if="oauthStatus.connected" class="drive-options">
 				<div class="drive-sub">
-					<label>Create a new mailbox folder in your Drive</label>
+					<label>Create a fresh folder in your Drive and invite them</label>
 					<div class="combo">
 						<input
 							v-model="peerEmail"
-							placeholder="Peer's Google email (optional — sends Drive invite)"
+							:placeholder="`${local.name}'s Google email (optional)`"
 							:disabled="driveBusy"
 						/>
 						<button
@@ -307,13 +307,17 @@ function extractFolderId(input) {
 							@click="createDriveFolder"
 							:disabled="driveBusy"
 						>
-							Create
+							Create folder
 						</button>
+					</div>
+					<div class="field-hint">
+						If you fill in their email, Google sends them an invite.
+						Otherwise you'll need to share the folder yourself.
 					</div>
 				</div>
 
 				<div class="drive-sub">
-					<label>Claim a folder a peer shared with you (cross-account)</label>
+					<label>Or pick a folder they shared with you</label>
 					<div class="row">
 						<button
 							class="btn btn-primary"
@@ -321,7 +325,7 @@ function extractFolderId(input) {
 							@click="pickDriveFolder"
 							:disabled="driveBusy || !oauthStatus.picker_configured"
 						>
-							{{ driveBusy ? 'Waiting for picker…' : 'Pick from Google Drive' }}
+							{{ driveBusy ? 'Waiting for browser…' : 'Choose folder from Drive' }}
 							<svg
 								v-if="!driveBusy"
 								viewBox="0 0 24 24"
@@ -337,24 +341,22 @@ function extractFolderId(input) {
 						</button>
 					</div>
 					<div v-if="!oauthStatus.picker_configured" class="field-hint">
-						Picker API key not configured. Set
-						<code>OTP_GOOGLE_API_KEY</code> and rebuild — see
+						The Drive picker isn't set up in this build. See
 						<code>CLOUD_SETUP.md</code>.
 					</div>
 					<div v-else class="field-hint">
-						Opens Google Picker in your browser. Select the shared folder
-						under "Shared with me". This is the only way to bind a folder
-						owned by another account under
-						<code>drive.file</code> scope.
+						Opens Google Drive in your browser. Find the folder
+						{{ local.name }} shared with you (under
+						<em>Shared with me</em>) and select it.
 					</div>
 				</div>
 
 				<div class="drive-sub">
-					<label>Or paste a folder ID directly (same account only)</label>
+					<label>Or paste a folder link directly</label>
 					<div class="combo">
 						<input
 							v-model="folderToBind"
-							placeholder="Drive folder URL or ID"
+							placeholder="https://drive.google.com/drive/folders/…"
 							:disabled="driveBusy"
 						/>
 						<button
@@ -363,18 +365,22 @@ function extractFolderId(input) {
 							@click="bindDriveFolder"
 							:disabled="driveBusy"
 						>
-							Bind
+							Link
 						</button>
+					</div>
+					<div class="field-hint">
+						Only works if you and your friend share a Google account.
+						Otherwise use <em>Choose folder from Drive</em> above.
 					</div>
 				</div>
 			</div>
 		</div>
 
 		<div class="card">
-			<div class="eyebrow">Compose</div>
+			<div class="eyebrow">Send a message</div>
 			<textarea
 				v-model="draft"
-				placeholder="Type a message…"
+				:placeholder="`Type a message to ${local.name}…`"
 				rows="3"
 				:disabled="busy"
 			/>
@@ -385,7 +391,7 @@ function extractFolderId(input) {
 					@click="send"
 					:disabled="busy"
 				>
-					{{ autoUploadActive ? 'Encrypt &amp; upload' : 'Encrypt' }}
+					{{ autoUploadActive ? 'Encrypt &amp; send' : 'Encrypt' }}
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 						<path d="M5 12h14" /><path d="M13 6l6 6-6 6" />
 					</svg>
@@ -394,8 +400,16 @@ function extractFolderId(input) {
 
 			<div v-if="outFrame" class="frame-out">
 				<div class="eyebrow" style="margin-top: 18px">
-					{{ outUploaded ? 'Manual fallback' : 'Frame to send' }}
+					{{ outUploaded ? 'Backup copy' : 'Encrypted message' }}
 				</div>
+				<p class="small" v-if="!outUploaded" style="margin-bottom: 8px">
+					Copy this text and paste it into email, Signal, or anywhere
+					else. Your friend's app will decode it.
+				</p>
+				<p class="small" v-else style="margin-bottom: 8px">
+					Already sent over Drive. You can also copy this version if
+					you want to send it through another channel as a backup.
+				</p>
 				<textarea :value="outFrame" readonly rows="3" />
 				<div class="row" style="margin-top: 8px">
 					<button class="btn btn-ghost" type="button" @click="copyOut">
@@ -409,10 +423,15 @@ function extractFolderId(input) {
 		</div>
 
 		<div class="card">
-			<div class="eyebrow">Receive (manual)</div>
+			<div class="eyebrow">Receive a message by hand</div>
+			<p class="small" style="margin-bottom: 10px">
+				If your friend sent you an encrypted message outside Google
+				Drive (email, Signal, paper, etc.), paste the text here to
+				decode it.
+			</p>
 			<textarea
 				v-model="inFrame"
-				placeholder="Paste a frame to decode…"
+				placeholder="Paste an encrypted message…"
 				rows="3"
 				:disabled="busy"
 			/>
@@ -432,13 +451,12 @@ function extractFolderId(input) {
 		</div>
 
 		<div v-if="inbox.length" class="card">
-			<div class="eyebrow">Inbox · session only</div>
+			<div class="eyebrow">Inbox · gone when you close the app</div>
 			<div v-for="m in inbox" :key="m.id" class="msg">
 				<div class="msg-head">
-					<span class="msg-seq">#{{ m.seq }}</span>
 					<span class="msg-ts">{{ formatTs(m.ts) }}</span>
 					<span class="pill" :class="m.source === 'drive' ? 'pill-accent' : 'pill-neutral'">
-						{{ m.source }}
+						{{ m.source === 'drive' ? 'via Drive' : 'pasted in' }}
 					</span>
 					<button
 						class="btn btn-ghost btn-dismiss"
@@ -488,7 +506,7 @@ function extractFolderId(input) {
 	.drive-options {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: 18px;
 	}
 
 	.drive-sub {
@@ -526,12 +544,6 @@ function extractFolderId(input) {
 		gap: 10px;
 		align-items: center;
 		margin-bottom: 8px;
-	}
-
-	.msg-seq {
-		font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-		font-size: 11px;
-		color: var(--fg-3);
 	}
 
 	.msg-ts {

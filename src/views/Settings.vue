@@ -26,11 +26,11 @@ onMounted(refresh)
 async function connect() {
 	error.value = ''
 	info.value =
-		'A browser tab opened to Google. Approve drive.file access and return here.'
+		'Your browser will open with the Google sign-in page. Approve access to "Files created by this app" and come back here.'
 	busy.value = true
 	try {
 		await invoke('oauth_connect')
-		info.value = 'Connected to Google Drive.'
+		info.value = 'Signed in to Google Drive.'
 	} catch (e) {
 		error.value = String(e)
 		info.value = ''
@@ -45,7 +45,8 @@ async function disconnect() {
 	busy.value = true
 	try {
 		await invoke('oauth_disconnect')
-		info.value = 'Disconnected. Refresh token cleared from the OS keychain.'
+		info.value =
+			'Signed out. Your sign-in is removed from this device.'
 	} catch (e) {
 		error.value = String(e)
 	} finally {
@@ -70,15 +71,16 @@ async function disconnect() {
 		</button>
 
 		<div class="eyebrow">Settings</div>
-		<h1 class="h1">Transport &amp; account.</h1>
+		<h1 class="h1">Internet delivery.</h1>
 
 		<div class="card">
 			<div class="card-head">
 				<div>
 					<div class="h2" style="margin-bottom: 4px">Google Drive</div>
 					<p class="small" style="margin: 0">
-						OAuth2 with the narrow <code>drive.file</code> scope. Refresh
-						token lives in the OS keychain.
+						Optional. Lets the app auto-send and auto-receive messages
+						through private folders in your Google Drive. Google only
+						sees encrypted text — never your messages.
 					</p>
 				</div>
 				<span
@@ -86,16 +88,17 @@ async function disconnect() {
 					:class="status.connected ? 'pill-success' : 'pill-neutral'"
 				>
 					<span class="dot" :class="{ pulse: status.connected }"></span>
-					{{ status.connected ? 'Connected' : 'Not connected' }}
+					{{ status.connected ? 'Signed in' : 'Not signed in' }}
 				</span>
 			</div>
 
 			<div v-if="!status.client_configured" class="banner banner-warn">
 				<div>
-					<strong>OAuth client credentials not embedded.</strong>
-					Rebuild with <code>OTP_GOOGLE_CLIENT_ID</code> and
-					<code>OTP_GOOGLE_CLIENT_SECRET</code> set in the environment.
-					See <code>CLOUD_SETUP.md</code>.
+					<strong>Drive isn't configured in this build.</strong>
+					Whoever compiled the app needs to follow
+					<code>CLOUD_SETUP.md</code> and rebuild it with the right
+					Google credentials. The app still works without Drive — you
+					can copy-paste encrypted messages by hand.
 				</div>
 			</div>
 
@@ -104,9 +107,9 @@ async function disconnect() {
 				class="banner banner-warn"
 			>
 				<div>
-					OAuth is configured but the Google Picker API key isn't.
-					Cross-account folder claiming will stay disabled. Set
-					<code>OTP_GOOGLE_API_KEY</code> and rebuild — see
+					Sign-in works, but choosing folders from other Google
+					accounts won't. You can still create new folders in your own
+					Drive. Set <code>OTP_GOOGLE_API_KEY</code> and rebuild — see
 					<code>CLOUD_SETUP.md</code>.
 				</div>
 			</div>
@@ -119,7 +122,7 @@ async function disconnect() {
 					@click="connect"
 					:disabled="busy"
 				>
-					{{ busy ? 'Waiting for browser…' : 'Connect Google Drive' }}
+					{{ busy ? 'Waiting for browser…' : 'Sign in to Google Drive' }}
 					<svg
 						v-if="!busy"
 						viewBox="0 0 24 24"
@@ -140,7 +143,7 @@ async function disconnect() {
 					@click="disconnect"
 					:disabled="busy"
 				>
-					Disconnect
+					Sign out
 				</button>
 			</div>
 
@@ -153,12 +156,22 @@ async function disconnect() {
 		</div>
 
 		<div class="card">
-			<div class="h2">About</div>
+			<div class="h2">What this app does &amp; doesn't do</div>
 			<p>
-				Pad material lives in this device's app data directory. Plaintext
-				is dropped from memory when you dismiss messages — no persistent
-				history is kept. Google Drive sees ciphertext blob sizes and
-				timing; it never sees plaintext or pad bytes.
+				<strong>Does:</strong> Encrypts every message with a fresh slice
+				of a key file you and a friend share. The encryption is
+				mathematically unbreakable — even a quantum computer can't
+				decrypt the messages without the same key file.
+			</p>
+			<p>
+				<strong>Doesn't:</strong> Keep any history. Messages live in
+				memory while the app is open and disappear when you dismiss them
+				or close the app. Reopening won't bring anything back.
+			</p>
+			<p>
+				<strong>What Google sees:</strong> The size of each encrypted
+				message, the timing, and which Google accounts they pass
+				between. The actual contents stay private.
 			</p>
 		</div>
 	</div>

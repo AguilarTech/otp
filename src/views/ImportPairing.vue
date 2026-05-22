@@ -27,11 +27,11 @@ async function pickDir() {
 async function importPairing() {
 	error.value = ''
 	if (!usbPairingDir.value) {
-		error.value = 'Pick the pairing folder on USB.'
+		error.value = 'Choose the folder on the USB stick that your friend gave you.'
 		return
 	}
 	if (!name.value.trim()) {
-		error.value = 'Choose a local label for this pairing.'
+		error.value = "Give your friend a name so you can find them in the list."
 		return
 	}
 	busy.value = true
@@ -63,24 +63,23 @@ async function importPairing() {
 			Back
 		</button>
 
-		<div class="eyebrow">Import pairing</div>
-		<h1 class="h1">Bring in pad material a peer handed you.</h1>
+		<div class="eyebrow">Add a friend from USB</div>
+		<h1 class="h1">Bring in a secret your friend handed you.</h1>
 		<p class="lead">
-			Pick the folder on the USB drive that contains
-			<code>pairing.toml</code>, <code>A.pad</code>, and
-			<code>B.pad</code>. The pads are copied into local app data with the
-			send / receive roles swapped — you can wipe the USB once import
-			finishes.
+			Plug in the USB your friend gave you and pick the folder that
+			contains their key files. We copy the files to your machine and set
+			up the friend in your contact list. After that, you can wipe the
+			USB.
 		</p>
 
 		<div class="card">
 			<div class="field">
-				<label>Pairing folder on USB</label>
+				<label>Folder on the USB</label>
 				<div class="combo">
 					<input
 						:value="usbPairingDir"
 						readonly
-						placeholder="No folder selected"
+						placeholder="Pick the folder your friend's USB"
 					/>
 					<button
 						class="btn btn-ghost"
@@ -91,15 +90,22 @@ async function importPairing() {
 						Choose…
 					</button>
 				</div>
+				<div class="field-hint">
+					Look for a folder named something like
+					<code>otp-pairing-…</code> on the USB.
+				</div>
 			</div>
 
 			<div class="field">
-				<label>Your label for this pairing</label>
+				<label>What you'll call your friend</label>
 				<input
 					v-model="name"
 					placeholder="e.g. Alice"
 					:disabled="busy"
 				/>
+				<div class="field-hint">
+					Just a label for your own contact list.
+				</div>
 			</div>
 
 			<div v-if="error" class="banner banner-error">{{ error }}</div>
@@ -111,7 +117,7 @@ async function importPairing() {
 					@click="importPairing"
 					:disabled="busy"
 				>
-					{{ busy ? 'Importing…' : 'Import' }}
+					{{ busy ? 'Importing…' : 'Add this friend' }}
 					<svg
 						v-if="!busy"
 						viewBox="0 0 24 24"
