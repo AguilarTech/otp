@@ -45,144 +45,310 @@ function percent(used, total) {
 
 <template>
 	<div>
-		<div class="head">
-			<div>
-				<div class="eyebrow">Your pairings</div>
+		<!-- Onboarding hero — shown when the user has no friends set up yet. -->
+		<template v-if="pairings.length === 0 && !loadError">
+			<section class="hero">
+				<div class="eyebrow">Private messaging done right</div>
 				<h1 class="h1">
-					Encrypted 1-to-1 over <br />one-time pads.
+					Send messages only your friend can read.
 				</h1>
 				<p class="lead">
-					Each pairing is a per-direction stream of pad material shared once
-					in person and consumed message by message. No reuse, ever.
+					OTP Messenger uses the
+					<strong>one-time pad</strong> — a classic encryption
+					technique that is mathematically impossible to break, even by
+					a quantum computer. The catch is you have to meet your friend
+					in person <em>once</em>, to swap a USB stick. After that, you
+					can message them from anywhere and your words stay completely
+					private. Not even Google or your internet provider can read
+					them.
 				</p>
-			</div>
-
-			<div class="head-actions">
-				<button class="btn btn-primary" type="button" @click="emit('create')">
-					New pairing
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-						<path d="M5 12h14" /><path d="M13 6l6 6-6 6" />
-					</svg>
-				</button>
-				<button class="btn btn-ghost" type="button" @click="emit('import')">
-					Import pairing
-				</button>
-				<button
-					class="btn btn-icon"
-					type="button"
-					@click="emit('settings')"
-					title="Settings"
-					aria-label="Settings"
-				>
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-						<circle cx="12" cy="12" r="3" />
-						<path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-					</svg>
-				</button>
-				<button
-					class="btn btn-icon"
-					type="button"
-					@click="emit('refresh')"
-					title="Refresh"
-					aria-label="Refresh"
-				>
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-						<path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-						<path d="M21 3v5h-5" />
-						<path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-						<path d="M3 21v-5h5" />
-					</svg>
-				</button>
-			</div>
-		</div>
-
-		<div v-if="loadError" class="banner banner-error">{{ loadError }}</div>
-
-		<div v-if="pairings.length === 0 && !loadError" class="card empty">
-			<div class="eyebrow">No pairings yet</div>
-			<p>
-				Create one to generate pad material for a peer (you'll write it to
-				USB and hand it over in person), or import a pairing a peer just
-				handed you.
-			</p>
-		</div>
-
-		<ul v-else class="pairings">
-			<li
-				v-for="p in pairings"
-				:key="p.id"
-				:class="['pairing-card', pairingLevel(p)]"
-				@click="emit('open', p)"
-			>
-				<div class="pairing-head">
-					<span class="name">{{ p.name }}</span>
-					<div class="badges">
-						<span v-if="p.drive_folder_id" class="pill pill-accent">
-							<span class="dot"></span> Drive bound
-						</span>
-						<span v-if="pairingLevel(p) === 'critical'" class="pill pill-danger">
-							<span class="dot"></span> Pad critical
-						</span>
-						<span
-							v-else-if="pairingLevel(p) === 'warn'"
-							class="pill pill-warn"
-						>
-							<span class="dot"></span> Pad low
-						</span>
-					</div>
-				</div>
-
-				<div class="pairing-meters">
-					<div class="meter">
-						<div class="meter-label">
-							<span>Outbound</span>
-							<span :class="['stat', padLevel(p.out_remaining)]">
-								{{ formatBytes(p.out_remaining) }} of {{ formatBytes(p.out_total) }}
-							</span>
-						</div>
-						<div class="meter-bar">
-							<div
-								:class="['meter-fill', padLevel(p.out_remaining)]"
-								:style="{ width: percent(p.out_total - p.out_remaining, p.out_total) + '%' }"
-							></div>
-						</div>
-					</div>
-					<div class="meter">
-						<div class="meter-label">
-							<span>Inbound</span>
-							<span :class="['stat', padLevel(p.in_remaining)]">
-								{{ formatBytes(p.in_remaining) }} of {{ formatBytes(p.in_total) }}
-							</span>
-						</div>
-						<div class="meter-bar">
-							<div
-								:class="['meter-fill', padLevel(p.in_remaining)]"
-								:style="{ width: percent(p.in_total - p.in_remaining, p.in_total) + '%' }"
-							></div>
-						</div>
-					</div>
-				</div>
-
-				<div class="pairing-foot">
-					<span class="mono">seq · sent {{ p.seq_out }} · received {{ p.last_seq_in }}</span>
-					<span class="open-hint">
-						Open
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<div class="hero-cta">
+					<button
+						class="btn btn-primary"
+						type="button"
+						@click="emit('create')"
+					>
+						Set up a friend on USB
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 							<path d="M5 12h14" /><path d="M13 6l6 6-6 6" />
 						</svg>
-					</span>
+					</button>
+					<button
+						class="btn btn-ghost"
+						type="button"
+						@click="emit('import')"
+					>
+						I have a USB from a friend
+					</button>
 				</div>
-			</li>
-		</ul>
+			</section>
+
+			<section class="steps">
+				<div class="eyebrow">How it works</div>
+				<ol class="step-grid">
+					<li class="step-card">
+						<div class="step-num">01</div>
+						<div class="h3">Trade a secret in person</div>
+						<p>
+							Generate a big random file on your laptop. Copy it to a
+							USB stick. Hand the USB to your friend so they can
+							import it. Now you both have the same secret — and
+							only you two.
+						</p>
+					</li>
+					<li class="step-card">
+						<div class="step-num">02</div>
+						<div class="h3">Type, encrypt, send</div>
+						<p>
+							Every message borrows a fresh slice of the secret file
+							as a one-use key. The slice is then erased from your
+							disk. Even if someone steals your laptop tomorrow,
+							yesterday's messages stay unreadable.
+						</p>
+					</li>
+					<li class="step-card">
+						<div class="step-num">03</div>
+						<div class="h3">Deliver anywhere</div>
+						<p>
+							Link Google Drive and we auto-deliver for you. Or copy
+							the encrypted text into email, Signal, even paper —
+							whatever works. Your friend's app unlocks it on the
+							other end.
+						</p>
+					</li>
+					<li class="step-card">
+						<div class="step-num">04</div>
+						<div class="h3">No history kept</div>
+						<p>
+							Messages live in memory until you dismiss them, then
+							they're gone. Close the app and the inbox empties.
+							Reopening won't bring anything back.
+						</p>
+					</li>
+				</ol>
+			</section>
+		</template>
+
+		<!-- Returning state — at least one friend exists. -->
+		<template v-else>
+			<div class="head">
+				<div>
+					<div class="eyebrow">Your friends</div>
+					<h1 class="h1">{{ pairings.length }} contact{{ pairings.length === 1 ? '' : 's' }} ready to message.</h1>
+				</div>
+
+				<div class="head-actions">
+					<button
+						class="btn btn-primary"
+						type="button"
+						@click="emit('create')"
+					>
+						New friend
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M5 12h14" /><path d="M13 6l6 6-6 6" />
+						</svg>
+					</button>
+					<button
+						class="btn btn-ghost"
+						type="button"
+						@click="emit('import')"
+					>
+						Import from USB
+					</button>
+					<button
+						class="btn btn-icon"
+						type="button"
+						@click="emit('settings')"
+						title="Settings"
+						aria-label="Settings"
+					>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<circle cx="12" cy="12" r="3" />
+							<path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+						</svg>
+					</button>
+					<button
+						class="btn btn-icon"
+						type="button"
+						@click="emit('refresh')"
+						title="Refresh"
+						aria-label="Refresh"
+					>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+							<path d="M21 3v5h-5" />
+							<path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+							<path d="M3 21v-5h5" />
+						</svg>
+					</button>
+				</div>
+			</div>
+
+			<div v-if="loadError" class="banner banner-error">{{ loadError }}</div>
+
+			<ul class="pairings">
+				<li
+					v-for="p in pairings"
+					:key="p.id"
+					:class="['pairing-card', pairingLevel(p)]"
+					@click="emit('open', p)"
+				>
+					<div class="pairing-head">
+						<span class="name">{{ p.name }}</span>
+						<div class="badges">
+							<span v-if="p.drive_folder_id" class="pill pill-accent">
+								<span class="dot"></span> Drive linked
+							</span>
+							<span
+								v-if="pairingLevel(p) === 'critical'"
+								class="pill pill-danger"
+							>
+								<span class="dot"></span> Key almost out
+							</span>
+							<span
+								v-else-if="pairingLevel(p) === 'warn'"
+								class="pill pill-warn"
+							>
+								<span class="dot"></span> Key running low
+							</span>
+						</div>
+					</div>
+
+					<div class="pairing-meters">
+						<div class="meter">
+							<div class="meter-label">
+								<span>For sending</span>
+								<span :class="['stat', padLevel(p.out_remaining)]">
+									{{ formatBytes(p.out_remaining) }} left
+								</span>
+							</div>
+							<div class="meter-bar">
+								<div
+									:class="['meter-fill', padLevel(p.out_remaining)]"
+									:style="{ width: percent(p.out_total - p.out_remaining, p.out_total) + '%' }"
+								></div>
+							</div>
+						</div>
+						<div class="meter">
+							<div class="meter-label">
+								<span>For receiving</span>
+								<span :class="['stat', padLevel(p.in_remaining)]">
+									{{ formatBytes(p.in_remaining) }} left
+								</span>
+							</div>
+							<div class="meter-bar">
+								<div
+									:class="['meter-fill', padLevel(p.in_remaining)]"
+									:style="{ width: percent(p.in_total - p.in_remaining, p.in_total) + '%' }"
+								></div>
+							</div>
+						</div>
+					</div>
+
+					<div class="pairing-foot">
+						<span class="msg-counts">
+							{{ p.seq_out }} sent · {{ p.last_seq_in }} received
+						</span>
+						<span class="open-hint">
+							Open
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M5 12h14" /><path d="M13 6l6 6-6 6" />
+							</svg>
+						</span>
+					</div>
+				</li>
+			</ul>
+		</template>
 	</div>
 </template>
 
 <style scoped>
+	/* Hero */
+	.hero {
+		margin-bottom: 40px;
+	}
+
+	.hero .h1 {
+		font-size: clamp(28px, 3.4vw, 44px);
+		margin-bottom: 22px;
+	}
+
+	.hero .lead {
+		max-width: 60ch;
+	}
+
+	.hero .lead strong {
+		font-weight: 700;
+		color: var(--fg);
+	}
+
+	.hero .lead em {
+		font-style: italic;
+		color: var(--accent);
+		font-weight: 600;
+	}
+
+	.hero-cta {
+		display: flex;
+		gap: 10px;
+		flex-wrap: wrap;
+		margin-top: 28px;
+	}
+
+	/* Steps */
+	.steps {
+		margin-bottom: 32px;
+	}
+
+	.step-grid {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 12px;
+	}
+
+	@media (min-width: 640px) {
+		.step-grid {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
+
+	.step-card {
+		background: var(--panel);
+		border: 1px solid var(--line);
+		border-radius: var(--r-card);
+		padding: 22px 24px;
+		box-shadow: var(--shadow-card);
+	}
+
+	.step-num {
+		font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--accent);
+		letter-spacing: 0.12em;
+		margin-bottom: 12px;
+	}
+
+	.step-card .h3 {
+		margin-bottom: 8px;
+		font-size: 16px;
+	}
+
+	.step-card p {
+		margin: 0;
+		font-size: 13.5px;
+		line-height: 1.55;
+	}
+
+	/* Returning header */
 	.head {
 		display: grid;
 		grid-template-columns: 1fr;
-		gap: 20px;
-		margin-bottom: 32px;
+		gap: 18px;
+		margin-bottom: 28px;
 	}
 
 	@media (min-width: 720px) {
@@ -199,14 +365,7 @@ function percent(used, total) {
 		align-items: center;
 	}
 
-	.empty {
-		text-align: left;
-	}
-
-	.empty p {
-		margin: 0;
-	}
-
+	/* List */
 	.pairings {
 		list-style: none;
 		padding: 0;
@@ -330,12 +489,9 @@ function percent(used, total) {
 		color: var(--fg-3);
 	}
 
-	.pairing-foot .mono {
-		font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-		background: transparent;
-		padding: 0;
-		font-size: 11px;
-		letter-spacing: 0.02em;
+	.msg-counts {
+		font-size: 12px;
+		letter-spacing: 0.01em;
 	}
 
 	.open-hint {

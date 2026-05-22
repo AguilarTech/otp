@@ -53,12 +53,12 @@ async function backToList() {
 
 				<div class="topbar-actions">
 					<span
-						v-if="view.name === 'list'"
+						v-if="view.name === 'list' && pairings.length > 0"
 						class="pill"
 						:class="oauthStatus.connected ? 'pill-success' : 'pill-neutral'"
 					>
 						<span class="dot" :class="{ pulse: oauthStatus.connected }"></span>
-						{{ oauthStatus.connected ? 'Drive connected' : 'Drive offline' }}
+						{{ oauthStatus.connected ? 'Drive on' : 'Drive off' }}
 					</span>
 				</div>
 			</div>

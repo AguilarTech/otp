@@ -46,15 +46,15 @@ async function pickUsb() {
 async function generate() {
 	error.value = ''
 	if (!name.value.trim()) {
-		error.value = 'Pairing name required.'
+		error.value = "Give your friend a name so you can find them in the list."
 		return
 	}
 	if (!usbDir.value) {
-		error.value = 'Pick a USB destination first.'
+		error.value = 'Choose a USB stick to save the key file onto.'
 		return
 	}
 	if (!padSizeMb.value || padSizeMb.value < 1) {
-		error.value = 'Pad size must be at least 1 MB.'
+		error.value = 'Key file size must be at least 1 MB.'
 		return
 	}
 	busy.value = true
@@ -88,37 +88,48 @@ async function generate() {
 			Back
 		</button>
 
-		<div class="eyebrow">New pairing</div>
-		<h1 class="h1">Generate fresh pad material.</h1>
+		<div class="eyebrow">Set up a new friend</div>
+		<h1 class="h1">Make a secret to share in person.</h1>
 		<p class="lead">
-			Two independent random pads are streamed to a USB volume and your
-			local app data dir in a single pass. Hand the USB to your peer in
-			person — that's the only time the pad material leaves a trusted
-			machine.
+			We'll generate a big random file and write it to a USB stick. Hand
+			the USB to your friend so they can import it on their machine. After
+			that, you're set — every message you send will use a fresh slice of
+			this file as a one-use key.
 		</p>
 
 		<div class="card">
 			<div class="field">
-				<label>Pairing name (your local label for the peer)</label>
-				<input v-model="name" placeholder="e.g. Bob" :disabled="busy" />
+				<label>What you'll call your friend</label>
+				<input
+					v-model="name"
+					placeholder="e.g. Bob"
+					:disabled="busy"
+				/>
+				<div class="field-hint">
+					This is your local label — your friend won't see it.
+				</div>
 			</div>
 
 			<div class="field">
-				<label>Hint shown to the peer on import</label>
+				<label>Your name (shown to your friend)</label>
 				<input
 					v-model="hint"
 					placeholder="e.g. Alice — work laptop"
 					:disabled="busy"
 				/>
+				<div class="field-hint">
+					When your friend imports the USB, they'll see this label so
+					they know it's from you.
+				</div>
 			</div>
 
 			<div class="field">
-				<label>USB destination</label>
+				<label>USB stick</label>
 				<div class="combo">
 					<input
 						:value="usbDir"
 						readonly
-						placeholder="No folder selected"
+						placeholder="Pick a folder on a USB stick"
 					/>
 					<button
 						class="btn btn-ghost"
@@ -130,12 +141,12 @@ async function generate() {
 					</button>
 				</div>
 				<div v-if="freeSpaceMb !== null" class="field-hint">
-					{{ freeSpaceMb.toLocaleString() }} MB free on this volume
+					{{ freeSpaceMb.toLocaleString() }} MB free on this stick.
 				</div>
 			</div>
 
 			<div class="field">
-				<label>Pad size per direction (MB)</label>
+				<label>Key file size (MB)</label>
 				<input
 					v-model.number="padSizeMb"
 					type="number"
@@ -143,9 +154,9 @@ async function generate() {
 					:disabled="busy"
 				/>
 				<div class="field-hint">
-					Two pads of this size are generated — one per direction. Pad
-					material is finite; bigger pad means more messages before a
-					re-key.
+					Two files of this size are generated — one for messages you
+					send, one for messages you receive. Bigger files mean more
+					messages before you need to swap a new USB.
 				</div>
 			</div>
 
@@ -158,7 +169,7 @@ async function generate() {
 					@click="generate"
 					:disabled="busy"
 				>
-					{{ busy ? 'Generating…' : 'Generate pads' }}
+					{{ busy ? 'Generating…' : 'Generate &amp; save to USB' }}
 					<svg
 						v-if="!busy"
 						viewBox="0 0 24 24"
@@ -175,8 +186,9 @@ async function generate() {
 			</div>
 
 			<p v-if="busy" class="field-hint" style="margin-top: 12px">
-				Large pads take a while — OsRng output is being written to local
-				storage and the USB simultaneously. Do not unplug the USB.
+				This can take a while for big files — we're writing secure
+				random data to your disk and the USB at the same time. Don't
+				unplug the stick.
 			</p>
 		</div>
 	</div>
