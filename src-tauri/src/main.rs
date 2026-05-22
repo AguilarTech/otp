@@ -16,6 +16,7 @@ use transport::{ConnectionStatus, DriveClient, Transport};
 use vault::{PairingInfo, Vault};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
+const DRIVE_APP_ROOT_FOLDER: &str = "OTP Messenger";
 const DRIVE_FOLDER_NAME_PREFIX: &str = "otp-msgr";
 const MAX_ATTACHMENT_BYTES: u64 = 50 * 1024 * 1024;
 
@@ -292,9 +293,18 @@ async fn drive_create_folder(
 ) -> Result<String, String> {
     let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
     let drive = DriveClient::new(state.transport.clone());
+
+    // All per-pairing mailboxes live inside a single app-managed
+    // "OTP Messenger" folder at the user's Drive root — created on
+    // first use, reused after.
+    let parent = drive
+        .ensure_root_folder(DRIVE_APP_ROOT_FOLDER)
+        .await
+        .map_err(|e| format!("could not set up the OTP Messenger folder in Drive: {}", e))?;
+
     let folder_name = format!("{}-{}", DRIVE_FOLDER_NAME_PREFIX, Uuid::new_v4());
     let folder_id = drive
-        .create_folder(&folder_name)
+        .create_subfolder(&folder_name, &parent)
         .await
         .map_err(|e| e.to_string())?;
     if !peer_email.trim().is_empty() {
