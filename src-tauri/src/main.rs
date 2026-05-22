@@ -384,6 +384,12 @@ fn drive_unbind_folder(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn remove_pairing(state: State<'_, AppState>, pairing_id: String) -> Result<(), String> {
+    let id = Uuid::parse_str(&pairing_id).map_err(|e| e.to_string())?;
+    state.vault.delete_pairing(&id).map_err(|e| e.to_string())
+}
+
 #[cfg(unix)]
 #[allow(clippy::unnecessary_cast)] // f_bavail/f_frsize widths differ across libc targets
 fn available_space(path: &Path) -> std::io::Result<u64> {
@@ -447,6 +453,7 @@ fn main() {
             drive_bind_folder,
             drive_pick_folder,
             drive_unbind_folder,
+            remove_pairing,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

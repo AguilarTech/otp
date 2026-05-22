@@ -35,6 +35,9 @@ const peerEmail = ref('')
 const folderToBind = ref('')
 const driveBusy = ref(false)
 
+const confirmingRemove = ref(false)
+const removeBusy = ref(false)
+
 let unlistenInbox = null
 
 async function refreshLocal() {
@@ -372,6 +375,19 @@ function extractFolderId(input) {
 	const m = input.match(/folders\/([a-zA-Z0-9_-]+)/)
 	return m ? m[1] : input
 }
+
+async function removeFriend() {
+	error.value = ''
+	removeBusy.value = true
+	try {
+		await invoke('remove_pairing', { pairingId: local.value.id })
+		emit('back')
+	} catch (e) {
+		error.value = String(e)
+		removeBusy.value = false
+		confirmingRemove.value = false
+	}
+}
 </script>
 
 <template>
@@ -706,6 +722,45 @@ function extractFolderId(input) {
 
 		<div v-if="info" class="banner banner-success">{{ info }}</div>
 		<div v-if="error" class="banner banner-error">{{ error }}</div>
+
+		<div class="card danger-zone">
+			<div class="eyebrow danger-eyebrow">Danger zone</div>
+			<p class="small">
+				Remove {{ local.name }} from this device and wipe their key
+				file. After this you won't be able to read past messages from
+				them or send new ones until you meet in person and swap a
+				fresh USB stick. The copy of the key on their device is
+				untouched — they'll need to remove their side themselves.
+			</p>
+			<div v-if="!confirmingRemove" class="row" style="margin-top: 12px">
+				<button
+					class="btn btn-danger"
+					type="button"
+					@click="confirmingRemove = true"
+					:disabled="removeBusy"
+				>
+					Remove this friend
+				</button>
+			</div>
+			<div v-else class="row" style="margin-top: 12px">
+				<button
+					class="btn btn-danger"
+					type="button"
+					@click="removeFriend"
+					:disabled="removeBusy"
+				>
+					{{ removeBusy ? 'Wiping…' : `Yes, remove ${local.name} permanently` }}
+				</button>
+				<button
+					class="btn btn-ghost"
+					type="button"
+					@click="confirmingRemove = false"
+					:disabled="removeBusy"
+				>
+					Cancel
+				</button>
+			</div>
+		</div>
 	</div>
 </template>
 
@@ -795,5 +850,15 @@ function extractFolderId(input) {
 
 	.paste-area textarea {
 		margin-top: 4px;
+	}
+
+	.danger-zone {
+		border-color: color-mix(in oklab, var(--danger) 25%, var(--line));
+	}
+
+	.danger-eyebrow::before {
+		background: var(--danger);
+		box-shadow: 0 0 0 4px
+			color-mix(in oklab, var(--danger) 18%, transparent);
 	}
 </style>
