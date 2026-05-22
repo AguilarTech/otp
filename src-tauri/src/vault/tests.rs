@@ -198,6 +198,69 @@ fn frame_layout_sanity() {
 }
 
 #[test]
+fn export_then_peer_import_roundtrip_both_directions() {
+    let a_dir = TempDir::new().unwrap();
+    let b_dir = TempDir::new().unwrap();
+    let usb_dir = TempDir::new().unwrap();
+
+    let alice = Vault::open(a_dir.path().to_path_buf()).unwrap();
+    let info_a = alice
+        .create_and_export_pairing("bob".into(), "alice".into(), 4096, usb_dir.path())
+        .unwrap();
+
+    let exported: Vec<_> = std::fs::read_dir(usb_dir.path())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .collect();
+    assert_eq!(exported.len(), 1);
+    let pairing_dir = exported[0].path();
+    assert!(pairing_dir.join("pairing.toml").exists());
+    assert!(pairing_dir.join("A.pad").exists());
+    assert!(pairing_dir.join("B.pad").exists());
+
+    let bob = Vault::open(b_dir.path().to_path_buf()).unwrap();
+    let info_b = bob
+        .import_pairing_from_usb("alice".into(), &pairing_dir)
+        .unwrap();
+    assert_eq!(info_a.id, info_b.id);
+    assert_eq!(info_b.out_total, 4096);
+    assert_eq!(info_b.in_total, 4096);
+
+    // Alice -> Bob
+    let f1 = alice.encrypt(&info_a.id, b"hello bob").unwrap();
+    let m1 = bob.decrypt(&f1).unwrap();
+    assert_eq!(&m1.plaintext[..], b"hello bob");
+
+    // Bob -> Alice (verifies the role swap is correct)
+    let f2 = bob.encrypt(&info_b.id, b"hi alice").unwrap();
+    let m2 = alice.decrypt(&f2).unwrap();
+    assert_eq!(&m2.plaintext[..], b"hi alice");
+}
+
+#[test]
+fn import_rejects_bad_sidecar_version() {
+    let v_dir = TempDir::new().unwrap();
+    let usb_dir = TempDir::new().unwrap();
+    let v = Vault::open(v_dir.path().to_path_buf()).unwrap();
+
+    let pairing_dir = usb_dir.path().join("bogus");
+    std::fs::create_dir_all(&pairing_dir).unwrap();
+    std::fs::write(pairing_dir.join("A.pad"), [0u8; 64]).unwrap();
+    std::fs::write(pairing_dir.join("B.pad"), [0u8; 64]).unwrap();
+    std::fs::write(
+        pairing_dir.join("pairing.toml"),
+        format!(
+            "schema_version = 99\npairing_id = \"{}\"\ncreated_at_ms = 0\noriginator_hint = \"\"\n",
+            Uuid::new_v4()
+        ),
+    )
+    .unwrap();
+
+    let err = v.import_pairing_from_usb("x".into(), &pairing_dir).unwrap_err();
+    assert!(matches!(err, VaultError::InvalidState(_)));
+}
+
+#[test]
 fn empty_plaintext_roundtrip() {
     let (alice, _ad, bob, _bd, pid) = setup_pair(256);
     let frame = alice.encrypt(&pid, b"").unwrap();

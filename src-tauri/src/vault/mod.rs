@@ -15,12 +15,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rand::rngs::OsRng;
 use rand::RngCore;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zeroize::{Zeroize, Zeroizing};
 
 pub use error::{Result, VaultError};
-pub use frame::{FRAME_VERSION, HEADER_LEN, MAC_LEN, POLY_KEY_LEN};
+pub use frame::{FRAME_VERSION, MAC_LEN, POLY_KEY_LEN};
 
 use crypto::{compute_mac, verify_mac, xor_in_place};
 use frame::{parse_frame, Header};
@@ -107,7 +107,10 @@ impl Vault {
     }
 
     /// Generate two fresh random pads of the given size and register the
-    /// pairing locally. USB export is layered on top of this in Phase 3.
+    /// pairing locally without writing to a USB volume. The Tauri UI uses
+    /// `create_and_export_pairing` for the real flow; this stays exposed
+    /// for tests and programmatic callers.
+    #[allow(dead_code)]
     pub fn create_pairing(&self, name: String, pad_size: u64) -> Result<PairingInfo> {
         let id = Uuid::new_v4();
         let dir = self.base.join("pads").join(id.to_string());
@@ -134,10 +137,9 @@ impl Vault {
         Ok(info)
     }
 
-    /// Register a pairing whose pad material was produced elsewhere
-    /// (USB import on the receiving peer, or test fixtures). Caller is
-    /// responsible for swapping outbound/inbound roles relative to the
-    /// originating peer.
+    /// Register a pairing whose pad material is already in memory.
+    /// Used by tests; the Tauri UI calls `import_pairing_from_usb`.
+    #[allow(dead_code)]
     pub fn import_pairing(
         &self,
         id: Uuid,
@@ -162,6 +164,119 @@ impl Vault {
             out_total: out_pad.len() as u64,
             out_cursor: 0,
             in_total: in_pad.len() as u64,
+            in_cursor: 0,
+            seq_out: 0,
+            last_seq_in: 0,
+            drive_folder_id: String::new(),
+        };
+        let info = PairingInfo::from(&p);
+        let mut st = self.state.lock().unwrap();
+        st.pairings.push(p);
+        self.persist(&st)?;
+        Ok(info)
+    }
+
+    /// Create a pairing on the local vault and export the matching pad
+    /// material + sidecar to a directory on USB so a peer can import it.
+    /// Convention: `A.pad` is the creator's outbound stream (importer's
+    /// inbound), `B.pad` is the creator's inbound (importer's outbound).
+    pub fn create_and_export_pairing(
+        &self,
+        name: String,
+        originator_hint: String,
+        pad_size: u64,
+        usb_dir: &Path,
+    ) -> Result<PairingInfo> {
+        if pad_size <= POLY_KEY_LEN {
+            return Err(VaultError::InvalidState(
+                "pad size must exceed Poly1305 key length (32 bytes)",
+            ));
+        }
+        let id = Uuid::new_v4();
+        let local_dir = self.base.join("pads").join(id.to_string());
+        std::fs::create_dir_all(&local_dir)?;
+
+        let usb_pairing_dir = usb_dir.join(pairing_export_dir_name(&name, &id));
+        std::fs::create_dir_all(&usb_pairing_dir)?;
+
+        let local_out = self.pad_path(&id, Direction::Out);
+        let local_in = self.pad_path(&id, Direction::In);
+        let usb_a = usb_pairing_dir.join("A.pad");
+        let usb_b = usb_pairing_dir.join("B.pad");
+
+        generate_pad_multi(&[&local_out, &usb_a], pad_size)?;
+        generate_pad_multi(&[&local_in, &usb_b], pad_size)?;
+
+        let now = now_ms();
+        let sidecar = SidecarV1 {
+            schema_version: SIDECAR_SCHEMA_VERSION,
+            pairing_id: id,
+            created_at_ms: now,
+            originator_hint,
+        };
+        std::fs::write(
+            usb_pairing_dir.join("pairing.toml"),
+            toml::to_string(&sidecar)?,
+        )?;
+
+        let p = Pairing {
+            id,
+            name,
+            created_at_ms: now,
+            out_total: pad_size,
+            out_cursor: 0,
+            in_total: pad_size,
+            in_cursor: 0,
+            seq_out: 0,
+            last_seq_in: 0,
+            drive_folder_id: String::new(),
+        };
+        let info = PairingInfo::from(&p);
+        let mut st = self.state.lock().unwrap();
+        st.pairings.push(p);
+        self.persist(&st)?;
+        Ok(info)
+    }
+
+    /// Import a pairing from a USB folder previously produced by
+    /// `create_and_export_pairing` on a peer's machine. Roles are swapped:
+    /// the importer's outbound is the creator's inbound (`B.pad`) and vice
+    /// versa.
+    pub fn import_pairing_from_usb(
+        &self,
+        name: String,
+        usb_pairing_dir: &Path,
+    ) -> Result<PairingInfo> {
+        let raw = std::fs::read_to_string(usb_pairing_dir.join("pairing.toml"))?;
+        let sidecar: SidecarV1 = toml::from_str(&raw)?;
+        if sidecar.schema_version != SIDECAR_SCHEMA_VERSION {
+            return Err(VaultError::InvalidState("unsupported sidecar schema"));
+        }
+        let id = sidecar.pairing_id;
+        {
+            let st = self.state.lock().unwrap();
+            if st.pairings.iter().any(|p| p.id == id) {
+                return Err(VaultError::PairingExists(id));
+            }
+        }
+        let usb_a = usb_pairing_dir.join("A.pad");
+        let usb_b = usb_pairing_dir.join("B.pad");
+        let local_dir = self.base.join("pads").join(id.to_string());
+        std::fs::create_dir_all(&local_dir)?;
+
+        std::fs::copy(&usb_b, self.pad_path(&id, Direction::Out))?;
+        std::fs::copy(&usb_a, self.pad_path(&id, Direction::In))?;
+
+        let out_total = std::fs::metadata(self.pad_path(&id, Direction::Out))?.len();
+        let in_total = std::fs::metadata(self.pad_path(&id, Direction::In))?.len();
+
+        let p = Pairing {
+            id,
+            name,
+            created_at_ms: now_ms(),
+            out_total,
+            out_cursor: 0,
+            in_total,
             in_cursor: 0,
             seq_out: 0,
             last_seq_in: 0,
@@ -326,25 +441,69 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+#[allow(dead_code)]
 fn generate_pad(path: &Path, size: u64) -> Result<()> {
-    let mut f = File::create(path)?;
+    generate_pad_multi(&[path], size)
+}
+
+fn generate_pad_multi(paths: &[&Path], size: u64) -> Result<()> {
+    let mut files: Vec<File> = paths
+        .iter()
+        .map(|p| File::create(p))
+        .collect::<std::io::Result<Vec<_>>>()?;
     const CHUNK: usize = 1024 * 1024;
     let mut buf = vec![0u8; CHUNK];
     let mut written: u64 = 0;
     while written < size {
         let n = std::cmp::min(size - written, CHUNK as u64) as usize;
         OsRng.fill_bytes(&mut buf[..n]);
-        f.write_all(&buf[..n])?;
+        for f in &mut files {
+            f.write_all(&buf[..n])?;
+        }
         written += n as u64;
     }
-    f.sync_all()?;
+    for f in &mut files {
+        f.sync_all()?;
+    }
     buf.zeroize();
     Ok(())
 }
 
+#[allow(dead_code)]
 fn write_pad(path: &Path, data: &[u8]) -> Result<()> {
     let mut f = File::create(path)?;
     f.write_all(data)?;
     f.sync_all()?;
     Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SidecarV1 {
+    schema_version: u32,
+    pairing_id: Uuid,
+    created_at_ms: u64,
+    #[serde(default)]
+    originator_hint: String,
+}
+
+pub const SIDECAR_SCHEMA_VERSION: u32 = 1;
+
+fn sanitize_for_path(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .take(32)
+        .collect()
+}
+
+fn short_id(id: &Uuid) -> String {
+    id.to_string().chars().take(8).collect()
+}
+
+fn pairing_export_dir_name(name: &str, id: &Uuid) -> String {
+    let n = sanitize_for_path(name);
+    if n.is_empty() {
+        format!("otp-pairing-{}", short_id(id))
+    } else {
+        format!("otp-pairing-{}-{}", n, short_id(id))
+    }
 }
