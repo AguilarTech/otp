@@ -29,9 +29,6 @@ tokio = { version = "1", features = ["sync", "time", "net", "io-util", "macros",
 webbrowser = "1"
 url = "2"
 
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
-
 [dev-dependencies]
 tempfile = "3"
 
