@@ -128,44 +128,148 @@ function percent(used, total) {
 				</ol>
 			</section>
 
-			<section class="promise">
-				<div class="eyebrow">The promise</div>
-				<div class="promise-grid">
-					<div class="promise-card does">
-						<div class="promise-tag">Does</div>
-						<p>
-							Encrypts every message with a fresh, never-reused
-							slice of a key you and a friend swapped in person.
-							The encryption is mathematically unbreakable — not
-							even a quantum computer can crack it.
-						</p>
-					</div>
-					<div class="promise-card doesnt">
-						<div class="promise-tag">Doesn't</div>
-						<p>
-							Keep any history. Messages live in memory while the
-							app is open and disappear when you dismiss them or
-							close the window. Reopening won't bring them back.
-						</p>
-					</div>
-					<div class="promise-card sees">
-						<div class="promise-tag">What Google sees (if you use it)</div>
-						<p>
-							The size of each encrypted blob, the timing, and
-							which Google accounts it passes between. Never the
-							contents.
-						</p>
-					</div>
-					<div class="promise-card optional">
-						<div class="promise-tag">Works without Google</div>
-						<p>
-							Google Drive is just the auto-delivery option. You
-							can use the app fully offline-of-Google: save each
-							message as a small <code>.otp</code> file and share
-							it however you already chat — email, Signal, even
-							printed paper.
-						</p>
-					</div>
+			<section class="learn-more">
+				<div class="eyebrow">Learn more</div>
+				<div class="faq">
+					<details class="faq-item">
+						<summary>
+							<span>What's a one-time pad?</span>
+							<svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M6 9l6 6 6-6" />
+							</svg>
+						</summary>
+						<div class="faq-body">
+							<p>
+								A one-time pad is a big file of random data that
+								you and a friend share. To encrypt a message,
+								the app takes a fresh slice of that file and
+								mixes it with your message — like overlaying a
+								layer of perfect static. The slice is then
+								erased and <strong>never reused</strong>.
+							</p>
+							<p>
+								The technique is over 140 years old and was
+								used to secure the Washington–Moscow hot line
+								during the Cold War. It's still the only
+								encryption that's mathematically proven
+								unbreakable.
+							</p>
+						</div>
+					</details>
+
+					<details class="faq-item">
+						<summary>
+							<span>Why is it unbreakable?</span>
+							<svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M6 9l6 6 6-6" />
+							</svg>
+						</summary>
+						<div class="faq-body">
+							<p>
+								Most encryption is <em>hard</em> to break — a
+								fast enough computer, or a future quantum
+								computer, could in theory grind through it. A
+								one-time pad is <strong>impossible</strong> to
+								break.
+							</p>
+							<p>
+								Every message gets mixed with truly random data
+								the attacker has no way to guess. To them,
+								every possible plaintext is equally likely.
+								There's literally no information to attack —
+								nothing to brute-force, no clever shortcut.
+							</p>
+							<p>
+								The trade-off: you have to meet your friend in
+								person <em>once</em> to swap the key file.
+								There's no way around that first handoff. After
+								that, all your messaging is digital.
+							</p>
+						</div>
+					</details>
+
+					<details class="faq-item">
+						<summary>
+							<span>How do I send my first message?</span>
+							<svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M6 9l6 6 6-6" />
+							</svg>
+						</summary>
+						<div class="faq-body">
+							<p>
+								<strong>1.</strong> Click
+								<strong>Set up a friend on USB</strong> above
+								and meet your friend in person.
+							</p>
+							<p>
+								<strong>2.</strong> Plug in a USB stick on your
+								laptop, generate the key file, hand the USB
+								over.
+							</p>
+							<p>
+								<strong>3.</strong> They open the app on their
+								laptop, click
+								<strong>I have a USB from a friend</strong>,
+								and import the file.
+							</p>
+							<p>
+								<strong>4.</strong> You're done. Open their
+								contact card, type a message, hit Encrypt. Send
+								the encrypted text through Google Drive (if you
+								sign in) or save it as a <code>.otp</code> file
+								and email / Signal / AirDrop it.
+							</p>
+						</div>
+					</details>
+
+					<details class="faq-item">
+						<summary>
+							<span>Do I need Google Drive?</span>
+							<svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M6 9l6 6 6-6" />
+							</svg>
+						</summary>
+						<div class="faq-body">
+							<p>
+								<strong>No.</strong> Google Drive is just an
+								optional auto-delivery channel. Without it,
+								every encrypted message can be saved as a small
+								<code>.otp</code> file (or copied as text) and
+								sent through whatever you already use — email,
+								Signal, Telegram, AirDrop, a USB stick, even
+								printed paper. Same security guarantees.
+							</p>
+							<p>
+								If you do sign in, Google sees the size and
+								timing of encrypted blobs and which Google
+								accounts they pass between.
+								<strong>Never the contents.</strong>
+							</p>
+						</div>
+					</details>
+
+					<details class="faq-item">
+						<summary>
+							<span>What does the app keep on disk?</span>
+							<svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M6 9l6 6 6-6" />
+							</svg>
+						</summary>
+						<div class="faq-body">
+							<p>
+								<strong>Keeps:</strong> The key files for each
+								of your friends, and how much of each one
+								you've used. That's it.
+							</p>
+							<p>
+								<strong>Doesn't keep:</strong> Any message
+								history. Plaintext lives in memory while the
+								app is open and disappears when you dismiss it
+								or close the window. Reopening won't bring
+								anything back.
+							</p>
+						</div>
+					</details>
 				</div>
 			</section>
 		</template>
@@ -388,65 +492,8 @@ function percent(used, total) {
 		font-size: 12px;
 	}
 
-	/* The "promise" panel — does / doesn't / what Google sees / works without Google. */
-	.promise {
+	.learn-more {
 		margin-bottom: 32px;
-	}
-
-	.promise-grid {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 12px;
-	}
-
-	@media (min-width: 640px) {
-		.promise-grid {
-			grid-template-columns: 1fr 1fr;
-		}
-	}
-
-	.promise-card {
-		background: var(--panel);
-		border: 1px solid var(--line);
-		border-radius: var(--r-card);
-		padding: 18px 22px;
-		box-shadow: var(--shadow-card);
-		border-left-width: 3px;
-		border-left-style: solid;
-	}
-
-	.promise-card.does {
-		border-left-color: var(--success);
-	}
-	.promise-card.doesnt {
-		border-left-color: var(--accent);
-	}
-	.promise-card.sees {
-		border-left-color: var(--warn);
-	}
-	.promise-card.optional {
-		border-left-color: var(--accent-2);
-	}
-
-	.promise-tag {
-		font-family: var(--sans);
-		font-size: 10.5px;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.1em;
-		color: var(--fg-2);
-		margin-bottom: 8px;
-	}
-
-	.promise-card p {
-		margin: 0;
-		font-size: 13px;
-		line-height: 1.55;
-		color: var(--fg-2);
-	}
-
-	.promise-card p code {
-		font-size: 12px;
 	}
 
 	/* Returning header */
